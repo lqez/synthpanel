@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SynthPanel{% endblock %}</title>
+  <style>
+    :root { --fg:#1a1a2e; --muted:#6b7280; --accent:#5b53e8; --bg:#f7f7fb; --card:#fff; --err:#c0392b; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, "Apple SD Gothic Neo", sans-serif;
+           color:var(--fg); background:var(--bg); }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px; }
+    header.bar { display:flex; align-items:center; gap:10px; padding:14px 20px; border-bottom:1px solid #eee; background:#fff; }
+    header.bar a { color:var(--accent); text-decoration:none; font-weight:600; }
+    h1 { font-size: 1.6rem; } h2 { font-size: 1.15rem; }
+    .card { background:var(--card); border:1px solid #ececf3; border-radius:12px; padding:22px; margin:16px 0; }
+    label { display:block; font-weight:600; margin:14px 0 6px; }
+    input[type=text], input[type=url], input[type=password], textarea, select {
+      width:100%; padding:10px 12px; border:1px solid #d8d8e3; border-radius:8px; font-size:1rem; }
+    .btn { display:inline-block; background:var(--accent); color:#fff; border:none; padding:11px 18px;
+           border-radius:8px; font-size:1rem; cursor:pointer; text-decoration:none; }
+    .btn.secondary { background:#ececf3; color:var(--fg); }
+    .muted { color:var(--muted); }
+    .error { color:var(--err); background:#fdecea; border:1px solid #f5c6c0; padding:10px 12px; border-radius:8px; }
+    .pill { display:inline-block; background:#eef; color:var(--accent); border-radius:999px; padding:2px 10px; font-size:.8rem; }
+    .list-item { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid #f0f0f5; }
+    .check { display:flex; gap:8px; align-items:flex-start; margin:8px 0; font-weight:400; }
+    .check input { width:auto; margin-top:4px; }
+    code { background:#f0f0f5; padding:1px 6px; border-radius:5px; }
+  </style>
+</head>
+<body>
+  <header class="bar"><a href="/">⬢ SynthPanel</a><span class="muted">사용성 테스트</span></header>
+  <div class="wrap">
+    {% block body %}{% endblock %}
+  </div>
+</body>
+</html>

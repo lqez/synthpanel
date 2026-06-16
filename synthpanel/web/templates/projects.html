@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}프로젝트 · SynthPanel{% endblock %}
+{% block body %}
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h1>프로젝트</h1>
+    <a class="btn" href="/projects/new">+ 새 프로젝트</a>
+  </div>
+  {% if settings %}
+    <p class="muted">현재 provider: <span class="pill">{{ settings.provider }}</span>
+      <a href="/onboarding">변경</a></p>
+  {% endif %}
+
+  <div class="card">
+    {% for p in projects %}
+      <div class="list-item">
+        <div>
+          <a href="/projects/{{ p.id }}"><strong>{{ p.name }}</strong></a>
+          <div class="muted">{{ p.url }}</div>
+        </div>
+        <a class="btn secondary" href="/projects/{{ p.id }}">열기 / 재실행</a>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}
