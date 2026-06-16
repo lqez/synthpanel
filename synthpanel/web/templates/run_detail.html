@@ -14,6 +14,23 @@
       페르소나 {{ run.result.summary.personas }}명 ·
       성공 {{ run.result.summary.succeeded or 0 }} ·
       버그 {{ run.result.summary.bugs }}건
+      <span style="float:right">
+        <a href="/runs/{{ run.id }}/report.html" target="_blank">HTML 리포트</a> ·
+        <a href="/runs/{{ run.id }}/report.md">Markdown</a>
+      </span>
+    </div>
+  {% endif %}
+
+  {% if agg and agg.issues %}
+    <div class="card">
+      <h2>공통 이슈 (우선순위)</h2>
+      {% for i in agg.issues %}
+        <div class="list-item">
+          <span><span class="pill">{{ i.severity.value }}</span> {{ i.title }}
+            <span class="muted">— {{ i.personas|join(', ') }}</span></span>
+          <span class="pill">{{ i.count }}×</span>
+        </div>
+      {% endfor %}
     </div>
   {% endif %}
 
