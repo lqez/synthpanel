@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "SynthPanel" }]
 dependencies = [
-    "playwright>=1.44",
+    "playwright>=1.49",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
     "pyyaml>=6.0",

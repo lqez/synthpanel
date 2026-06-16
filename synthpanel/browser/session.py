@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, AsyncIterator
 
 from synthpanel.agent.actions import Action, ActionType
-from synthpanel.browser.observer import serialize_a11y_tree
+from synthpanel.browser.observer import format_aria_snapshot
 from synthpanel.report.models import Observation
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -69,7 +69,7 @@ class PlaywrightSession:
         self._page.on("requestfailed", on_request_failed)
 
     async def observe(self) -> Observation:
-        snapshot = await self._page.accessibility.snapshot()
+        snapshot = await self._page.locator("body").aria_snapshot()
         screenshot_b64 = None
         if self._vision:
             import base64
@@ -79,7 +79,7 @@ class PlaywrightSession:
         return Observation(
             url=self._page.url,
             title=await self._page.title(),
-            a11y_tree=serialize_a11y_tree(snapshot),
+            a11y_tree=format_aria_snapshot(snapshot),
             console_errors=list(self._console_errors),
             page_errors=list(self._page_errors),
             network_errors=list(self._network_errors),
