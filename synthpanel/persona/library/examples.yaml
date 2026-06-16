@@ -1,0 +1,29 @@
+# Reusable archetype personas. Sparse on purpose — an LLM recommender or the
+# user can fill in remaining factors for a specific app.
+
+- name: "김순자"
+  archetype: "디지털 입문 고령 사용자"
+  demographics: { age_band: "65-74", gender: F, region: "대구", city_tier: metro, education: highschool }
+  tech: { savviness: 2, device: mobile, os: android, network: "3g_throttled", a11y: ["large_text"] }
+  psych: { patience: low, exploration: methodical, reads_instructions: high }
+  attitudes: { privacy_sensitivity: high }
+  intent: { goal: "손주에게 송금하기", context: first_visit, time_pressure: relaxed }
+  factor_weights: { "tech.savviness": 0.9, "psych.patience": 0.8 }
+
+- name: "Alex Carter"
+  archetype: "Impatient power user"
+  demographics: { age_band: "25-34", gender: M, region: "San Francisco", city_tier: metro, education: graduate, occupation: "software engineer" }
+  tech: { savviness: 5, device: desktop, os: macos, browser: chrome, network: fast, input_preference: keyboard }
+  psych: { patience: low, exploration: goal_driven, decision_speed: impulsive, reads_instructions: low }
+  attitudes: { tech_adoption: early_adopter, price_sensitivity: low }
+  intent: { goal: "Sign up and reach the dashboard as fast as possible", context: from_ad, time_pressure: rushed }
+  factor_weights: { "psych.patience": 0.9, "psych.exploration": 0.7 }
+
+- name: "Priya Nair"
+  archetype: "Cautious first-time buyer on mobile"
+  demographics: { age_band: "35-44", gender: F, region: "Mumbai", city_tier: metro, education: college, household: family_with_kids }
+  tech: { savviness: 3, device: mobile, os: android, network: slow_4g, input_preference: touch }
+  psych: { patience: medium, exploration: methodical, attention_to_detail: high, skepticism: high, reads_instructions: high }
+  attitudes: { privacy_sensitivity: high, price_sensitivity: high }
+  intent: { goal: "Compare prices and complete a small purchase", context: first_visit, time_pressure: normal }
+  factor_weights: { "attitudes.price_sensitivity": 0.8, "psych.skepticism": 0.7 }
