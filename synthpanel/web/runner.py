@@ -8,14 +8,21 @@ web UI always gets a result to display.
 
 from __future__ import annotations
 
-from synthpanel.agent.loop import run_session
 from synthpanel.agent.providers import build_provider
+from synthpanel.orchestrator import ProgressSink, run_panel
 from synthpanel.persona.models import Persona
 from synthpanel.report.models import SessionResult, SessionStatus
 
 
-async def execute_run(project: dict, settings: dict, *, max_steps: int = 15) -> dict:
-    """Run all personas in `project` and return a serializable result dict."""
+async def execute_run(
+    project: dict,
+    settings: dict,
+    *,
+    max_steps: int = 15,
+    concurrency: int = 4,
+    on_progress: ProgressSink | None = None,
+) -> dict:
+    """Run all personas in `project` (in parallel) and return a result dict."""
     personas = [Persona.model_validate(p) for p in project.get("personas", [])]
     if not personas:
         personas = [_default_persona(project)]
@@ -24,7 +31,7 @@ async def execute_run(project: dict, settings: dict, *, max_steps: int = 15) -> 
 
     try:
         results = await _run_with_playwright(
-            project["url"], personas, provider, max_steps
+            project["url"], personas, provider, max_steps, concurrency, on_progress
         )
     except Exception as exc:  # noqa: BLE001 - surface launch/setup errors in the UI
         return {
@@ -45,24 +52,34 @@ async def execute_run(project: dict, settings: dict, *, max_steps: int = 15) -> 
 
 
 async def _run_with_playwright(
-    url: str, personas: list[Persona], provider, max_steps: int
+    url: str,
+    personas: list[Persona],
+    provider,
+    max_steps: int,
+    concurrency: int,
+    on_progress: ProgressSink | None,
 ) -> list[SessionResult]:
     from playwright.async_api import async_playwright
 
     from synthpanel.browser.session import PlaywrightSession
 
-    results: list[SessionResult] = []
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         try:
-            for persona in personas:
-                async with PlaywrightSession.create(browser, url) as session:
-                    results.append(
-                        await run_session(persona, session, provider, max_steps=max_steps)
-                    )
+            def session_factory(_persona):
+                # Each persona gets its own isolated BrowserContext.
+                return PlaywrightSession.create(browser, url)
+
+            return await run_panel(
+                personas,
+                session_factory,
+                provider,
+                concurrency=concurrency,
+                max_steps=max_steps,
+                on_progress=on_progress,
+            )
         finally:
             await browser.close()
-    return results
 
 
 def _default_persona(project: dict) -> Persona:
