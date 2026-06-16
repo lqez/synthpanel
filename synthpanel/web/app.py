@@ -12,14 +12,29 @@ Flow:
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import json
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import (
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from fastapi.templating import Jinja2Templates
 
 from synthpanel.agent.providers import available_providers, test_connection
+from synthpanel.orchestrator import PanelProgress
 from synthpanel.persona.loader import load_personas
+from synthpanel.persona.models import Persona
+from synthpanel.persona.recommender import recommend_personas
+from synthpanel.report.aggregate import aggregate
+from synthpanel.report.models import SessionResult
+from synthpanel.report.render import render_html, render_markdown
+from synthpanel.web.progress import RunBroker
 from synthpanel.web.runner import execute_run
 from synthpanel.web.store import Store
 
@@ -27,10 +42,31 @@ _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 _LIBRARY = Path(__file__).parent.parent / "persona" / "library" / "examples.yaml"
 
 
-def create_app(store: Store | None = None) -> FastAPI:
+def _encode_persona(persona: Persona) -> str:
+    """Encode a persona as a base64 JSON token for a checkbox value."""
+    raw = persona.model_dump_json(exclude_none=True, exclude_defaults=True)
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+
+def _decode_persona(token: str) -> dict:
+    return json.loads(base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8"))
+
+
+def _persona_choices(personas: list[Persona]) -> list[dict]:
+    """Shape personas for the selection template: token + display fields."""
+    return [
+        {"token": _encode_persona(p), "name": p.name, "archetype": p.archetype, "goal": p.intent.goal}
+        for p in personas
+    ]
+
+
+def create_app(store: Store | None = None, *, background: bool = True) -> FastAPI:
     app = FastAPI(title="SynthPanel")
     store = store or Store()
     app.state.store = store
+    broker = RunBroker()
+    app.state.broker = broker
+    app.state.tasks: set = set()
 
     def render(request: Request, template: str, *, status_code: int = 200, **ctx) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(request, template, ctx, status_code=status_code)
@@ -92,7 +128,35 @@ def create_app(store: Store | None = None) -> FastAPI:
     # (e) project creation
     @app.get("/projects/new", response_class=HTMLResponse)
     def project_new(request: Request):
-        return render(request, "project_new.html", library=load_personas(_LIBRARY))
+        return render(
+            request,
+            "project_new.html",
+            library=_persona_choices(load_personas(_LIBRARY)),
+            recommended=[],
+        )
+
+    # AI persona recommendation: re-renders the form with a recommended panel
+    # pre-selected, on top of the library choices. The user can still edit.
+    @app.post("/projects/recommend", response_class=HTMLResponse)
+    async def project_recommend(request: Request):
+        form = await request.form()
+        settings = store.get_settings() or {"provider": "fake", "config": {}}
+        personas = await recommend_personas(
+            url=(form.get("url") or "").strip(),
+            focus=(form.get("focus") or "").strip(),
+            n=int(form.get("count") or 5),
+            provider_key=settings["provider"],
+            config=settings["config"],
+        )
+        return render(
+            request,
+            "project_new.html",
+            library=_persona_choices(load_personas(_LIBRARY)),
+            recommended=_persona_choices(personas),
+            name=form.get("name", ""),
+            url=form.get("url", ""),
+            focus=form.get("focus", ""),
+        )
 
     @app.post("/projects/new")
     async def project_create(request: Request):
@@ -100,12 +164,12 @@ def create_app(store: Store | None = None) -> FastAPI:
         name = (form.get("name") or "Untitled").strip()
         url = (form.get("url") or "").strip()
         focus = (form.get("focus") or "").strip()
-        selected = set(form.getlist("personas"))
-        personas = [
-            p.model_dump(exclude_none=True, exclude_defaults=True)
-            for p in load_personas(_LIBRARY)
-            if p.name in selected
-        ]
+        personas: list[dict] = []
+        for token in form.getlist("personas"):
+            try:
+                personas.append(_decode_persona(token))
+            except Exception:  # noqa: BLE001 - ignore tampered/invalid tokens
+                continue
         project_id = store.create_project(name, url, focus, personas)
         return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
@@ -122,6 +186,28 @@ def create_app(store: Store | None = None) -> FastAPI:
             runs=store.list_runs(project_id),
         )
 
+    async def _execute_and_store(run_id: int, project: dict, settings: dict) -> None:
+        def on_progress(e: PanelProgress) -> None:
+            broker.publish(
+                run_id,
+                {
+                    "persona": e.persona_name,
+                    "kind": e.kind,
+                    "index": e.index,
+                    "total": e.total,
+                    "status": e.status,
+                },
+            )
+
+        try:
+            result = await execute_run(project, settings, on_progress=on_progress)
+            status = "error" if result.get("error") else "done"
+        except Exception as exc:  # noqa: BLE001
+            result = {"error": f"{type(exc).__name__}: {exc}", "sessions": []}
+            status = "error"
+        store.finish_run(run_id, status, result)
+        broker.finish(run_id)
+
     @app.post("/projects/{project_id}/run")
     async def project_run(project_id: int):
         project = store.get_project(project_id)
@@ -129,16 +215,54 @@ def create_app(store: Store | None = None) -> FastAPI:
         if not project or not settings:
             return RedirectResponse("/projects", status_code=303)
         run_id = store.create_run(project_id)
-        result = await execute_run(project, settings)
-        status = "error" if result.get("error") else "done"
-        store.finish_run(run_id, status, result)
+        if background:
+            # Run concurrently so the UI can stream progress while it executes.
+            task = asyncio.create_task(_execute_and_store(run_id, project, settings))
+            app.state.tasks.add(task)
+            task.add_done_callback(app.state.tasks.discard)
+        else:
+            await _execute_and_store(run_id, project, settings)
         return RedirectResponse(f"/runs/{run_id}", status_code=303)
+
+    @app.get("/runs/{run_id}/stream")
+    async def run_stream(run_id: int):
+        async def gen():
+            async for event in broker.stream(run_id):
+                if event is None:
+                    yield "event: done\ndata: {}\n\n"
+                    return
+                yield f"data: {json.dumps(event)}\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
 
     @app.get("/runs/{run_id}", response_class=HTMLResponse)
     def run_detail(request: Request, run_id: int):
         run = store.get_run(run_id)
         if not run:
             return RedirectResponse("/projects", status_code=303)
-        return render(request, "run_detail.html", run=run)
+        agg = aggregate(_results_from_run(run))
+        return render(request, "run_detail.html", run=run, agg=agg)
+
+    @app.get("/runs/{run_id}/report.md", response_class=PlainTextResponse)
+    def run_report_md(run_id: int):
+        run = store.get_run(run_id)
+        if not run:
+            return PlainTextResponse("not found", status_code=404)
+        return PlainTextResponse(render_markdown(_run_title(run), _results_from_run(run)))
+
+    @app.get("/runs/{run_id}/report.html", response_class=HTMLResponse)
+    def run_report_html(run_id: int):
+        run = store.get_run(run_id)
+        if not run:
+            return HTMLResponse("not found", status_code=404)
+        return HTMLResponse(render_html(_run_title(run), _results_from_run(run)))
+
+    def _run_title(run: dict) -> str:
+        project = store.get_project(run["project_id"])
+        return f"{project['name'] if project else 'Run'} · Run #{run['id']}"
 
     return app
+
+
+def _results_from_run(run: dict) -> list[SessionResult]:
+    return [SessionResult.model_validate(s) for s in run.get("result", {}).get("sessions", [])]

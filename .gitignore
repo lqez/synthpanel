@@ -9,6 +9,8 @@ dist/
 venv/
 .pytest_cache/
 .mypy_cache/
+.coverage
+htmlcov/
 
 # SynthPanel outputs
 reports/
