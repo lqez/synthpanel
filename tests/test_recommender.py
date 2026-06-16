@@ -30,3 +30,18 @@ async def test_recommend_falls_back_to_heuristic_for_fake_provider():
         url="https://app.test", focus="", n=3, provider_key="fake", config={}
     )
     assert len(panel) == 3
+
+
+async def test_recommend_falls_back_when_anthropic_raises(monkeypatch):
+    async def boom(*args, **kwargs):
+        raise RuntimeError("no network")
+
+    monkeypatch.setattr(
+        "synthpanel.persona.llm_recommender.recommend_with_anthropic", boom
+    )
+    # Should swallow the error and return the heuristic panel, never hard-fail.
+    panel = await recommend_personas(
+        url="u", focus="checkout", n=2, provider_key="anthropic", config={"api_key": "x"}
+    )
+    assert len(panel) == 2
+    assert all("checkout" in p.intent.goal for p in panel)
