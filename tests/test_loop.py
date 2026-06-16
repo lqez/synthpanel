@@ -65,3 +65,33 @@ async def test_max_steps_terminates():
     result = await run_session(_persona(), browser, llm, max_steps=3)
     assert len(result.steps) == 3
     assert result.status is SessionStatus.FAILED
+
+
+async def test_typed_password_is_redacted_from_trace_and_history():
+    from synthpanel.persona.identity import synthetic_identity
+
+    persona = _persona()
+    pw = synthetic_identity(persona).password
+    browser = FakeBrowser()
+    llm = FakeLLM(
+        script=[
+            Action(type=ActionType.TYPE, target='textbox "Password"', value=pw),
+            Action(type=ActionType.DONE),
+        ]
+    )
+    result = await run_session(persona, browser, llm, max_steps=5)
+
+    type_step = result.steps[0]
+    assert type_step.action_type == "type"
+    # The real password must never appear in the stored trace.
+    assert type_step.action_value == "***"
+    assert pw not in (type_step.action_value or "")
+    assert all(pw not in (s.observation_digest or "") for s in result.steps)
+
+
+async def test_caller_supplied_secret_redacted():
+    persona = _persona()
+    browser = FakeBrowser()
+    llm = FakeLLM(script=[Action(type=ActionType.TYPE, target="x", value="hunter2-secret")])
+    result = await run_session(persona, browser, llm, max_steps=2, secrets={"hunter2-secret"})
+    assert result.steps[0].action_value == "***"

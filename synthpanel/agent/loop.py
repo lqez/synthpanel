@@ -10,6 +10,7 @@ from __future__ import annotations
 from synthpanel.agent.actions import TERMINAL_ACTIONS, Action, ActionType
 from synthpanel.agent.llm import LLMProvider, Turn
 from synthpanel.browser.base import BrowserSession
+from synthpanel.persona.identity import synthetic_identity
 from synthpanel.persona.models import Persona
 from synthpanel.report.models import (
     BugReport,
@@ -26,10 +27,21 @@ async def run_session(
     llm: LLMProvider,
     *,
     max_steps: int = 25,
+    secrets: set[str] | None = None,
 ) -> SessionResult:
-    """Run one persona to its goal, giving up, or max_steps, and return results."""
+    """Run one persona to its goal, giving up, or max_steps, and return results.
+
+    Secrets (the persona's synthetic password plus any caller-supplied values) are
+    redacted from step traces and history so credentials the persona types never
+    land in stored output.
+    """
     result = SessionResult(persona_name=persona.name, status=SessionStatus.FAILED)
     history: list[str] = []
+
+    secret_values = {s for s in (secrets or set()) if s}
+    identity = synthetic_identity(persona)
+    if identity.password:
+        secret_values.add(identity.password)
 
     for step_idx in range(max_steps):
         # --- Observe ---
@@ -46,10 +58,10 @@ async def run_session(
 
         trace = StepTrace(
             step_idx=step_idx,
-            observation_digest=observation.digest(),
+            observation_digest=_redact(observation.digest(), secret_values),
             action_type=action.type.value,
             action_target=action.target,
-            action_value=action.value,
+            action_value=_redact(action.value, secret_values),
             rationale=action.rationale,
         )
 
@@ -62,14 +74,14 @@ async def run_session(
             )
             trace.result = action.type.value
             result.steps.append(trace)
-            history.append(_summarize(action, trace.result))
+            history.append(_summarize(action, trace.result, secret_values))
             break
 
         if action.type is ActionType.REPORT_BUG:
             result.bugs.append(_bug_from(action, observation, persona.name, step_idx))
             trace.result = "bug reported"
         elif action.type is ActionType.NOTE:
-            result.ux_feedback += (action.value or "") + "\n"
+            result.ux_feedback += (_redact(action.value, secret_values) or "") + "\n"
             trace.result = "note recorded"
         else:
             try:
@@ -81,7 +93,7 @@ async def run_session(
                     BugReport(
                         title=f"Action '{action.type.value}' failed",
                         severity=Severity.MAJOR,
-                        repro_steps=[h for h in history] + [_summarize(action, "")],
+                        repro_steps=[h for h in history] + [_summarize(action, "", secret_values)],
                         actual=str(exc),
                         persona_name=persona.name,
                         step_idx=step_idx,
@@ -90,14 +102,23 @@ async def run_session(
                 )
 
         result.steps.append(trace)
-        history.append(_summarize(action, trace.result))
+        history.append(_summarize(action, trace.result, secret_values))
 
     return result
 
 
-def _summarize(action: Action, outcome: str) -> str:
+def _redact(text: str | None, secrets: set[str]) -> str | None:
+    if not text:
+        return text
+    for secret in secrets:
+        text = text.replace(secret, "***")
+    return text
+
+
+def _summarize(action: Action, outcome: str, secrets: set[str]) -> str:
     target = f" {action.target}" if action.target else ""
-    value = f" = {action.value!r}" if action.value else ""
+    redacted = _redact(action.value, secrets)
+    value = f" = {redacted!r}" if redacted else ""
     return f"[{action.type.value}{target}{value}] -> {outcome}".strip()
 
 
