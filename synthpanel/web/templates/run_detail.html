@@ -41,6 +41,11 @@
       페르소나 {{ run.result.summary.personas }}명 ·
       성공 {{ run.result.summary.succeeded or 0 }} ·
       버그 {{ run.result.summary.bugs }}건
+      {% if run.result.summary.tokens_in is defined %}
+        <br><span class="muted">토큰: in {{ run.result.summary.tokens_in }} ·
+        out {{ run.result.summary.tokens_out }} ·
+        예상 비용 ${{ "%.4f"|format(run.result.summary.cost_usd or 0) }}</span>
+      {% endif %}
       <span style="float:right">
         <a href="/runs/{{ run.id }}/report.html" target="_blank">HTML 리포트</a> ·
         <a href="/runs/{{ run.id }}/report.md">Markdown</a>
@@ -63,7 +68,12 @@
 
   {% for s in run.result.sessions %}
     <div class="card">
-      <h2>{{ s.persona_name }} <span class="pill">{{ s.status }}</span></h2>
+      <h2>{{ s.persona_name }} <span class="pill">{{ s.status }}</span>
+        <span style="float:right;font-size:.85rem">
+          {% if s.trace_path %}<a href="/runs/{{ run.id }}/sessions/{{ loop.index0 }}/trace">trace.zip</a>{% endif %}
+          {% if s.video_path %} · <a href="/runs/{{ run.id }}/sessions/{{ loop.index0 }}/video">video</a>{% endif %}
+        </span>
+      </h2>
       {% if s.ux_feedback %}<p class="muted">{{ s.ux_feedback }}</p>{% endif %}
 
       {% if s.bugs %}

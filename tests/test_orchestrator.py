@@ -7,7 +7,7 @@ from synthpanel.agent.actions import Action, ActionType
 from synthpanel.agent.llm import FakeLLM
 from synthpanel.orchestrator import PanelProgress, run_panel
 from synthpanel.persona.models import Intent, Persona
-from synthpanel.report.models import Observation
+from synthpanel.report.models import Observation, SessionStatus
 from tests.fakes import FakeBrowser
 
 pytestmark = pytest.mark.asyncio
@@ -74,3 +74,55 @@ async def test_progress_events_emitted():
     assert len(starts) == 3
     assert len(finishes) == 3
     assert all(e.status == "success" for e in finishes)
+
+
+class _SlowAlwaysDone:
+    """A session whose factory hangs longer than the session timeout."""
+
+    @asynccontextmanager
+    async def factory(self, persona):
+        await asyncio.sleep(5)  # exceeds the timeout in the test
+        yield FakeBrowser()
+
+
+async def test_session_timeout_recorded_as_failed_bug():
+    tracker = _SlowAlwaysDone()
+    llm = _AlwaysDone()
+    results = await run_panel(
+        _personas(1), tracker.factory, llm, concurrency=1, max_steps=2,
+        session_timeout=0.05,
+    )
+    assert results[0].status is SessionStatus.FAILED
+    assert any("timed out" in b.title for b in results[0].bugs)
+
+
+async def test_crash_is_retried_then_recorded():
+    attempts = {"n": 0}
+
+    @asynccontextmanager
+    async def flaky_factory(persona):
+        attempts["n"] += 1
+        raise RuntimeError("boom")
+        yield  # pragma: no cover
+
+    results = await run_panel(
+        _personas(1), flaky_factory, _AlwaysDone(), concurrency=1, max_steps=2, retries=2,
+    )
+    # 1 initial + 2 retries = 3 attempts, then recorded as a failed session.
+    assert attempts["n"] == 3
+    assert results[0].status is SessionStatus.FAILED
+    assert any("crashed" in b.title for b in results[0].bugs)
+
+
+async def test_artifact_paths_propagated_from_session():
+    class _SessionWithArtifacts(FakeBrowser):
+        trace_path = "/tmp/trace.zip"
+        video_path = "/tmp/video.webm"
+
+    @asynccontextmanager
+    async def factory(persona):
+        yield _SessionWithArtifacts()
+
+    results = await run_panel(_personas(1), factory, _AlwaysDone(), max_steps=2)
+    assert results[0].trace_path == "/tmp/trace.zip"
+    assert results[0].video_path == "/tmp/video.webm"

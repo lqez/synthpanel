@@ -32,6 +32,10 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
+    def artifacts_dir(self, run_id: int) -> Path:
+        """Directory for a run's debugging artifacts (traces/videos), beside the DB."""
+        return self.path.parent / "artifacts" / f"run_{run_id}"
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row

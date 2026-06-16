@@ -78,3 +78,6 @@ class SessionResult(BaseModel):
     steps: list[StepTrace] = Field(default_factory=list)
     bugs: list[BugReport] = Field(default_factory=list)
     ux_feedback: str = ""
+    # Filesystem paths to debugging artifacts, when captured.
+    trace_path: str | None = None
+    video_path: str | None = None

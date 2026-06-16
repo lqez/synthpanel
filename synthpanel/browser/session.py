@@ -29,6 +29,9 @@ class PlaywrightSession:
         self._console_errors: list[str] = []
         self._page_errors: list[str] = []
         self._network_errors: list[str] = []
+        # Populated on teardown when artifacts are captured.
+        self.trace_path: str | None = None
+        self.video_path: str | None = None
         self._wire_listeners()
 
     @classmethod
@@ -39,16 +42,44 @@ class PlaywrightSession:
         url: str,
         *,
         vision: bool = False,
+        artifacts_dir: object = None,
+        trace: bool = False,
+        record_video: bool = False,
         **context_kwargs: object,
     ) -> "AsyncIterator[PlaywrightSession]":
-        """Create an isolated context+page, navigate to `url`, yield the session."""
+        """Create an isolated context+page, navigate to `url`, yield the session.
+
+        When `artifacts_dir` is given, optionally records a Playwright trace.zip
+        and/or a video for post-run debugging.
+        """
+        from pathlib import Path
+
+        adir = Path(artifacts_dir) if artifacts_dir is not None else None
+        if adir is not None:
+            adir.mkdir(parents=True, exist_ok=True)
+        if adir is not None and record_video:
+            context_kwargs.setdefault("record_video_dir", str(adir))
+
         context = await browser.new_context(**context_kwargs)  # type: ignore[attr-defined]
+        if adir is not None and trace:
+            await context.tracing.start(screenshots=True, snapshots=True)
         page = await context.new_page()
         session = cls(context, page, vision=vision)
         try:
             await page.goto(url)
             yield session
         finally:
+            if adir is not None and trace:
+                try:
+                    await context.tracing.stop(path=str(adir / "trace.zip"))
+                    session.trace_path = str(adir / "trace.zip")
+                except Exception:  # noqa: BLE001 - never let artifact capture break a run
+                    pass
+            if adir is not None and record_video and page.video is not None:
+                try:
+                    session.video_path = await page.video.path()
+                except Exception:  # noqa: BLE001
+                    pass
             await context.close()
 
     def _wire_listeners(self) -> None:
