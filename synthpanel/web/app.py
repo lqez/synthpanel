@@ -12,21 +12,29 @@ Flow:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from fastapi.templating import Jinja2Templates
 
 from synthpanel.agent.providers import available_providers, test_connection
+from synthpanel.orchestrator import PanelProgress
 from synthpanel.persona.loader import load_personas
 from synthpanel.persona.models import Persona
 from synthpanel.persona.recommender import recommend_personas
 from synthpanel.report.aggregate import aggregate
 from synthpanel.report.models import SessionResult
 from synthpanel.report.render import render_html, render_markdown
+from synthpanel.web.progress import RunBroker
 from synthpanel.web.runner import execute_run
 from synthpanel.web.store import Store
 
@@ -52,10 +60,13 @@ def _persona_choices(personas: list[Persona]) -> list[dict]:
     ]
 
 
-def create_app(store: Store | None = None) -> FastAPI:
+def create_app(store: Store | None = None, *, background: bool = True) -> FastAPI:
     app = FastAPI(title="SynthPanel")
     store = store or Store()
     app.state.store = store
+    broker = RunBroker()
+    app.state.broker = broker
+    app.state.tasks: set = set()
 
     def render(request: Request, template: str, *, status_code: int = 200, **ctx) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(request, template, ctx, status_code=status_code)
@@ -175,6 +186,28 @@ def create_app(store: Store | None = None) -> FastAPI:
             runs=store.list_runs(project_id),
         )
 
+    async def _execute_and_store(run_id: int, project: dict, settings: dict) -> None:
+        def on_progress(e: PanelProgress) -> None:
+            broker.publish(
+                run_id,
+                {
+                    "persona": e.persona_name,
+                    "kind": e.kind,
+                    "index": e.index,
+                    "total": e.total,
+                    "status": e.status,
+                },
+            )
+
+        try:
+            result = await execute_run(project, settings, on_progress=on_progress)
+            status = "error" if result.get("error") else "done"
+        except Exception as exc:  # noqa: BLE001
+            result = {"error": f"{type(exc).__name__}: {exc}", "sessions": []}
+            status = "error"
+        store.finish_run(run_id, status, result)
+        broker.finish(run_id)
+
     @app.post("/projects/{project_id}/run")
     async def project_run(project_id: int):
         project = store.get_project(project_id)
@@ -182,10 +215,25 @@ def create_app(store: Store | None = None) -> FastAPI:
         if not project or not settings:
             return RedirectResponse("/projects", status_code=303)
         run_id = store.create_run(project_id)
-        result = await execute_run(project, settings)
-        status = "error" if result.get("error") else "done"
-        store.finish_run(run_id, status, result)
+        if background:
+            # Run concurrently so the UI can stream progress while it executes.
+            task = asyncio.create_task(_execute_and_store(run_id, project, settings))
+            app.state.tasks.add(task)
+            task.add_done_callback(app.state.tasks.discard)
+        else:
+            await _execute_and_store(run_id, project, settings)
         return RedirectResponse(f"/runs/{run_id}", status_code=303)
+
+    @app.get("/runs/{run_id}/stream")
+    async def run_stream(run_id: int):
+        async def gen():
+            async for event in broker.stream(run_id):
+                if event is None:
+                    yield "event: done\ndata: {}\n\n"
+                    return
+                yield f"data: {json.dumps(event)}\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
 
     @app.get("/runs/{run_id}", response_class=HTMLResponse)
     def run_detail(request: Request, run_id: int):
