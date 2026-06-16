@@ -39,6 +39,18 @@ class AnthropicProvider:
 
         self._client = AsyncAnthropic(api_key=api_key)
         self._model = model
+        # Cumulative token usage across all decide() calls on this provider.
+        self.usage: dict[str, int] = {"input": 0, "output": 0}
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    def _record_usage(self, msg: object) -> None:
+        usage = getattr(msg, "usage", None)
+        if usage is not None:
+            self.usage["input"] += getattr(usage, "input_tokens", 0) or 0
+            self.usage["output"] += getattr(usage, "output_tokens", 0) or 0
 
     async def decide(self, turn: Turn) -> Action:
         content: list[dict] = [{"type": "text", "text": render_user_turn(turn)}]
@@ -61,6 +73,7 @@ class AnthropicProvider:
             tool_choice={"type": "tool", "name": "act"},
             messages=[{"role": "user", "content": content}],
         )
+        self._record_usage(msg)
         for block in msg.content:
             if getattr(block, "type", "") == "tool_use":
                 return Action.model_validate(block.input)

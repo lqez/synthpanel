@@ -21,7 +21,7 @@ async def test_wraps_launch_errors_and_uses_default_persona(monkeypatch):
 
 
 async def test_success_summary_counts_bugs_and_successes(monkeypatch):
-    async def fake_run(url, personas, provider, max_steps, concurrency, on_progress):
+    async def fake_run(url, personas, provider, **kwargs):
         return [
             SessionResult(
                 persona_name="A",
@@ -39,4 +39,6 @@ async def test_success_summary_counts_bugs_and_successes(monkeypatch):
     assert result["summary"]["bugs"] == 2
     assert result["summary"]["succeeded"] == 1
     assert result["summary"]["personas"] == 2
+    # Fake provider has no usage; cost defaults to 0.
+    assert result["summary"]["cost_usd"] == 0.0
     assert len(result["sessions"]) == 2

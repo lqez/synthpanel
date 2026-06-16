@@ -19,6 +19,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import (
+    FileResponse,
     HTMLResponse,
     PlainTextResponse,
     RedirectResponse,
@@ -200,7 +201,12 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             )
 
         try:
-            result = await execute_run(project, settings, on_progress=on_progress)
+            result = await execute_run(
+                project,
+                settings,
+                artifacts_dir=store.artifacts_dir(run_id),
+                on_progress=on_progress,
+            )
             status = "error" if result.get("error") else "done"
         except Exception as exc:  # noqa: BLE001
             result = {"error": f"{type(exc).__name__}: {exc}", "sessions": []}
@@ -243,6 +249,19 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         agg = aggregate(_results_from_run(run))
         return render(request, "run_detail.html", run=run, agg=agg)
 
+    @app.get("/runs/{run_id}/sessions/{idx}/{kind}")
+    def run_artifact(run_id: int, idx: int, kind: str):
+        run = store.get_run(run_id)
+        sessions = (run or {}).get("result", {}).get("sessions", [])
+        if not run or idx >= len(sessions) or kind not in ("trace", "video"):
+            return PlainTextResponse("not found", status_code=404)
+        path = sessions[idx].get("trace_path" if kind == "trace" else "video_path")
+        # Confine served files to this run's artifacts directory.
+        base = store.artifacts_dir(run_id).resolve()
+        if not path or not _within(Path(path), base) or not Path(path).exists():
+            return PlainTextResponse("not found", status_code=404)
+        return FileResponse(path)
+
     @app.get("/runs/{run_id}/report.md", response_class=PlainTextResponse)
     def run_report_md(run_id: int):
         run = store.get_run(run_id)
@@ -266,3 +285,12 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
 
 def _results_from_run(run: dict) -> list[SessionResult]:
     return [SessionResult.model_validate(s) for s in run.get("result", {}).get("sessions", [])]
+
+
+def _within(path: Path, base: Path) -> bool:
+    """True if `path` resolves to a location inside `base` (path-traversal guard)."""
+    try:
+        path.resolve().relative_to(base)
+        return True
+    except (ValueError, OSError):
+        return False

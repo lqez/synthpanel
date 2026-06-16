@@ -24,20 +24,28 @@ class _Block:
             setattr(self, k, v)
 
 
+class _Usage:
+    def __init__(self, input_tokens, output_tokens):
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+
+
 class _Messages:
-    def __init__(self, content):
+    def __init__(self, content, usage=None):
         self._content = content
+        self._usage = usage
         self.calls: list[dict] = []
 
     async def create(self, **kw):
         self.calls.append(kw)
-        return type("Msg", (), {"content": self._content})()
+        return type("Msg", (), {"content": self._content, "usage": self._usage})()
 
 
-def _provider(content):
+def _provider(content, usage=None):
     p = object.__new__(AnthropicProvider)
-    p._client = type("C", (), {"messages": _Messages(content)})()
+    p._client = type("C", (), {"messages": _Messages(content, usage)})()
     p._model = "claude-test"
+    p.usage = {"input": 0, "output": 0}
     return p
 
 
@@ -62,6 +70,13 @@ async def test_decide_gives_up_when_no_tool_use():
     p = _provider([_Block("text", text="just chatting")])
     action = await p.decide(_turn())
     assert action.type is ActionType.GIVE_UP
+
+
+async def test_decide_accumulates_token_usage():
+    p = _provider([_Block("tool_use", input={"type": "done"})], usage=_Usage(100, 20))
+    await p.decide(_turn())
+    await p.decide(_turn())
+    assert p.usage == {"input": 200, "output": 40}
 
 
 async def test_decide_attaches_screenshot_in_vision_mode():

@@ -79,3 +79,20 @@ async def test_full_session_against_real_page(browser, tmp_path):
     actions = [s.action_type for s in result.steps]
     assert actions == ["click", "type", "done"]
     assert all(s.ok for s in result.steps)
+
+
+async def test_trace_and_video_artifacts_captured(browser, tmp_path):
+    from synthpanel.browser.session import PlaywrightSession
+
+    page_file = tmp_path / "demo.html"
+    page_file.write_text(_PAGE, encoding="utf-8")
+    artifacts = tmp_path / "artifacts"
+
+    async with PlaywrightSession.create(
+        browser, page_file.as_uri(), artifacts_dir=artifacts, trace=True, record_video=True
+    ) as session:
+        await session.observe()
+
+    # Both artifacts exist on disk and their paths are recorded on the session.
+    assert session.trace_path and Path(session.trace_path).exists()
+    assert session.video_path and Path(session.video_path).exists()
