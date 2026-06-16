@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · SynthPanel{% endblock %}
+{% block body %}
+  <p><a href="/projects">← 프로젝트 목록</a></p>
+  <h1>{{ project.name }}</h1>
+  <div class="card">
+    <p><strong>URL:</strong> <code>{{ project.url }}</code></p>
+    {% if project.focus %}<p><strong>Focus:</strong> {{ project.focus }}</p>{% endif %}
+    <p><strong>페르소나:</strong>
+      {% for p in project.personas %}<span class="pill">{{ p.name }}</span> {% endfor %}
+      {% if not project.personas %}<span class="muted">기본 1명</span>{% endif %}
+    </p>
+    <form method="post" action="/projects/{{ project.id }}/run">
+      <button class="btn" type="submit">▶ 테스트 실행</button>
+    </form>
+  </div>
+
+  <h2>실행 이력</h2>
+  <div class="card">
+    {% if not runs %}<p class="muted">아직 실행 기록이 없습니다.</p>{% endif %}
+    {% for r in runs %}
+      <div class="list-item">
+        <div><a href="/runs/{{ r.id }}">Run #{{ r.id }}</a>
+          <span class="muted">{{ r.created_at }}</span></div>
+        <span class="pill">{{ r.status }}</span>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}

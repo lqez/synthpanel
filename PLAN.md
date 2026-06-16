@@ -35,6 +35,11 @@ synthpanel/
 ├─ cli.py                # 진입점: synthpanel run/init
 ├─ config.py             # 설정/모델/env 로딩 (pydantic-settings)
 ├─ orchestrator.py       # N개 세션 asyncio.gather + Semaphore 동시성 제어
+├─ web/                  # 로컬 웹 앱 (FastAPI + HTMX/Jinja)
+│   ├─ app.py            # FastAPI 라우트 (온보딩 a~f 플로우)
+│   ├─ store.py          # SQLite: settings / projects / runs (~/.synthpanel)
+│   ├─ templates/        # Jinja 템플릿 (welcome, provider, project, run)
+│   └─ static/           # CSS 등
 ├─ persona/
 │   ├─ models.py         # Persona 스키마 (5차원 팩터)
 │   ├─ factors.py        # 5차원 팩터 정의·검증·기본값
@@ -153,7 +158,31 @@ synthpanel run \
   --out ./reports/run-2026-06-16
 ```
 
-## 9. 구현 단계 (점진적, 각 단계 동작 가능)
+## 9. 로컬 웹 앱 & 온보딩 플로우
+
+`synthpanel serve`로 로컬 웹 서버를 띄우고 브라우저로 접속한다. 스택은
+**FastAPI + HTMX/Jinja**(별도 JS 빌드 없음), 로컬 상태는 **SQLite (`~/.synthpanel/synthpanel.db`)**.
+
+```
+[serve] → 브라우저 접속
+  (a) Welcome → "Get Started"
+  (b) LLM Provider 선택: Claude(Anthropic) / OpenAI(Codex) / 로컬(Ollama)   ※ Claude 먼저
+  (c) 설정값 입력(API key·base URL·모델) → "연결 테스트" → 성공 시 로컬 저장
+       └ 다음 세션부터 마지막 설정을 기본값으로 자동 적용하고 (b)(c) 스킵
+  (d) 프로젝트 유무 분기
+       ├ 없음 → 바로 프로젝트 생성
+       └ 있음 → 프로젝트 목록(선택해 다른 설정으로 재실행 / 재실행)
+  (e) 프로젝트 생성: URL + 테스트 방식/중점(focus) + 대상 페르소나 결정
+  (f) 프로젝트 상세 → 여기서 Test 실행, 실행 이력·리포트 확인
+```
+
+- **Provider 추상화**: 각 provider는 `(label, 설정 필드, 기본 모델, test_connection)`을 노출.
+  `LLMProvider` 프로토콜 덕에 엔진은 provider 종류와 무관하게 동작.
+- **연결 테스트**: 저장 전 최소 호출로 키/모델 유효성 확인. 실패 시 저장 안 함.
+- **저장 모델(SQLite)**: `settings`(마지막 provider 설정), `projects`(url/focus/personas),
+  `runs`(실행 이력 + 결과 JSON).
+
+## 10. 구현 단계 (점진적, 각 단계 동작 가능)
 
 1. **스캐폴딩**: 프로젝트 구조, `pyproject.toml`, README, PLAN.md.
 2. **브라우저 코어**: 단일 페르소나로 URL 열고 접근성 트리 직렬화 + 콘솔/네트워크 에러 후킹.
@@ -161,10 +190,13 @@ synthpanel run \
 4. **실제 LLM 연동**: Anthropic tool-use 액션, 프롬프트 템플릿, 버그/완료 판단.
 5. **페르소나 생성/로딩**: 5차원 팩터, YAML 라이브러리 + LLM 추천기 + `init` 플로우.
 6. **병렬 오케스트레이터**: N 세션 동시 실행, 동시성/타임아웃/재시도.
-7. **리포팅**: trace/bug/ux 수집 → Markdown + HTML 대시보드 + 집계 클러스터링.
-8. **비전 모드 + 다듬기**: 스크린샷 첨부 경로, 비용/토큰 로깅, 데모용 샘플 앱.
+7. **로컬 웹 앱**: FastAPI + HTMX/Jinja 온보딩 플로우(a~f), SQLite 저장, provider
+   연결 테스트, 프로젝트 생성/상세/실행.
+8. **리포팅**: trace/bug/ux 수집 → Markdown + HTML 대시보드 + 집계 클러스터링.
+9. **비전 모드 + 다듬기**: 스크린샷 첨부 경로, 비용/토큰 로깅, 데모용 샘플 앱.
 
-## 10. 첫 PR 범위
+## 11. PR 진행
 
-**단계 1~3** (스캐폴딩 + 브라우저 코어 + Fake LLM 루프). API 키나 외부망 없이도
-`pytest`로 전체 루프가 도는 상태를 먼저 확보하고, 이후 PR에서 실제 LLM·병렬·리포팅을 얹는다.
+- PR1 (완료): 단계 1~3 — 스캐폴딩 + 브라우저 코어 + Fake LLM 루프.
+- PR2 (현재): 단계 7 — 로컬 웹 앱 온보딩 플로우 + SQLite + provider 설정/연결 테스트 +
+  프로젝트 CRUD + 실행. API 키 없이도 Fake provider로 전체 플로우가 도는 상태로 유지.

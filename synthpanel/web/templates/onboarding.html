@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Provider 설정 · SynthPanel{% endblock %}
+{% block body %}
+  <h1>LLM Provider 설정</h1>
+  <p class="muted">사용할 모델 제공자를 고르고 설정값을 입력하세요. 저장 전에 연결을 테스트합니다.</p>
+
+  {% if error %}<div class="error">연결 실패: {{ error }}</div>{% endif %}
+
+  <form method="post" action="/onboarding" class="card">
+    <label for="provider">Provider</label>
+    <select id="provider" name="provider" onchange="syncFields()">
+      {% for p in providers %}
+        <option value="{{ p.key }}" {% if current and current.provider == p.key %}selected{% endif %}>
+          {{ p.label }}
+        </option>
+      {% endfor %}
+    </select>
+
+    {% for p in providers %}
+      <div class="fields" data-provider="{{ p.key }}">
+        {% for f in p.fields %}
+          <label>{{ f.label }}</label>
+          <input type="{{ f.type }}" name="{{ f.key }}" placeholder="{{ f.placeholder }}"
+                 value="{{ (current.config[f.key] if current and current.config and f.key in current.config else '') }}">
+        {% endfor %}
+      </div>
+    {% endfor %}
+
+    <p style="margin-top:18px">
+      <button class="btn" type="submit">연결 테스트 후 저장</button>
+    </p>
+  </form>
+
+  <script>
+    function syncFields() {
+      var sel = document.getElementById('provider').value;
+      document.querySelectorAll('.fields').forEach(function (el) {
+        el.style.display = (el.dataset.provider === sel) ? 'block' : 'none';
+      });
+    }
+    syncFields();
+  </script>
+{% endblock %}

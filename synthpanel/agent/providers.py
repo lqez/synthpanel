@@ -1,0 +1,102 @@
+"""LLM provider registry: metadata, connection testing, and factory.
+
+Each provider declares the config fields the web onboarding form should render,
+plus a default model. The agent loop stays provider-agnostic via LLMProvider;
+this module is the single place that knows about concrete providers.
+
+Only Claude (Anthropic) and the offline Fake provider are wired up now; OpenAI
+(Codex) and local Ollama are declared as placeholders for later steps.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from synthpanel.agent.llm import FakeLLM, LLMProvider
+
+
+@dataclass(frozen=True)
+class ProviderField:
+    key: str
+    label: str
+    type: str = "text"  # "text" | "password"
+    required: bool = True
+    placeholder: str = ""
+
+
+@dataclass(frozen=True)
+class ProviderSpec:
+    key: str
+    label: str
+    default_model: str
+    fields: list[ProviderField] = field(default_factory=list)
+    available: bool = True
+
+
+PROVIDERS: dict[str, ProviderSpec] = {
+    "anthropic": ProviderSpec(
+        key="anthropic",
+        label="Claude (Anthropic)",
+        default_model="claude-opus-4-8",
+        fields=[
+            ProviderField("api_key", "API Key", type="password", placeholder="sk-ant-..."),
+            ProviderField("model", "Model", required=False, placeholder="claude-opus-4-8"),
+        ],
+    ),
+    "fake": ProviderSpec(
+        key="fake",
+        label="Fake (offline demo)",
+        default_model="fake",
+        fields=[],
+    ),
+    # Declared for the UI; not selectable until implemented.
+    "openai": ProviderSpec(
+        key="openai",
+        label="OpenAI (Codex)",
+        default_model="gpt-4o",
+        fields=[ProviderField("api_key", "API Key", type="password")],
+        available=False,
+    ),
+    "ollama": ProviderSpec(
+        key="ollama",
+        label="Local (Ollama)",
+        default_model="llama3.1",
+        fields=[ProviderField("base_url", "Base URL", placeholder="http://localhost:11434/v1")],
+        available=False,
+    ),
+}
+
+
+def available_providers() -> list[ProviderSpec]:
+    return [p for p in PROVIDERS.values() if p.available]
+
+
+async def test_connection(provider_key: str, config: dict) -> tuple[bool, str]:
+    """Validate credentials/model with a minimal call. Returns (ok, message)."""
+    if provider_key == "fake":
+        return True, "OK (offline fake provider)"
+    if provider_key == "anthropic":
+        from synthpanel.agent.anthropic_provider import test_anthropic_connection
+
+        return await test_anthropic_connection(config)
+    return False, f"provider '{provider_key}' is not available yet"
+
+
+def build_provider(provider_key: str, config: dict) -> LLMProvider:
+    """Construct a runnable LLMProvider from saved config."""
+    if provider_key == "fake":
+        from synthpanel.agent.actions import Action, ActionType
+
+        # A small exploratory script so offline demo runs do something visible.
+        script = [
+            Action(type=ActionType.SCROLL, rationale="Get an overview."),
+            Action(type=ActionType.WAIT, rationale="Let content settle."),
+            Action(type=ActionType.DONE, rationale="Reached an overview."),
+        ]
+        return FakeLLM(script=script, bug_on_console_error=True)
+    if provider_key == "anthropic":
+        from synthpanel.agent.anthropic_provider import AnthropicProvider
+
+        model = config.get("model") or PROVIDERS["anthropic"].default_model
+        return AnthropicProvider(api_key=config["api_key"], model=model)
+    raise ValueError(f"provider '{provider_key}' is not available yet")

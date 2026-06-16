@@ -28,6 +28,20 @@ def version() -> None:
 
 
 @app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Bind host."),
+    port: int = typer.Option(8000, help="Bind port."),
+) -> None:
+    """Launch the local web app (onboarding flow + projects + runs)."""
+    import uvicorn
+
+    from synthpanel.web.app import create_app
+
+    rprint(f"SynthPanel web UI → http://{host}:{port}")
+    uvicorn.run(create_app(), host=host, port=port)
+
+
+@app.command()
 def run(
     url: str = typer.Option(..., help="Target web app URL."),
     persona_name: str = typer.Option("Tester", help="Persona display name."),
