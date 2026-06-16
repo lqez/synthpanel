@@ -41,3 +41,8 @@ markers = [
 ]
 # Fast suite stays hermetic; run browser tests explicitly with `pytest -m e2e`.
 addopts = "-m 'not e2e'"
+filterwarnings = [
+    # Starlette's TestClient warns about httpx vs httpx2 — a third-party
+    # deprecation we can't act on yet; silence just that message.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
