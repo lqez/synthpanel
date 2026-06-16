@@ -11,23 +11,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.11"
-      - run: pip install -e ".[dev]"
+          enable-cache: true
+      - run: uv sync
       - name: Run fast suite (e2e deselected)
-        run: pytest -q
+        run: uv run pytest -q
 
   e2e:
     name: End-to-end (real browser)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.11"
-      - run: pip install -e ".[dev]"
+          enable-cache: true
+      - run: uv sync
       - name: Install Chromium
-        run: playwright install --with-deps chromium
+        run: uv run playwright install --with-deps chromium
       - name: Run e2e suite
-        run: pytest -m e2e -q
+        run: uv run pytest -m e2e -q
