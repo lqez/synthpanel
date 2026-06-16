@@ -1,65 +1,62 @@
 # SynthPanel
 
-LLM 페르소나 기반 **병렬 사용성 테스트** 도구. 바이브 코딩된 웹앱 URL을 주면,
-N개의 가상 사용자 페르소나가 각자의 목표·성향·기술수준을 가지고 실제 브라우저(Playwright)를
-병렬로 조작하며 앱을 사용한다. 마치 클로즈드 베타처럼 돌려서 **버그·UX 마찰·정성 피드백**을
-자동 수집한다.
+SynthPanel runs a panel of LLM-driven user personas against your web app in
+parallel. Give it a URL and each persona — with its own goals, tech literacy,
+and temperament — drives a real browser (Playwright) to use the app like a
+closed beta tester would, surfacing **bugs, UX friction, and qualitative
+feedback** automatically.
 
-전체 설계는 [PLAN.md](./PLAN.md) 참고.
+- **Persona panel** — auto-recommended or hand-picked synthetic users across a
+  5-dimension factor model (demographics, tech literacy, psychographics,
+  attitudes, intent).
+- **Real browser sessions** — Observe → Think → Act → Verify loop over the
+  accessibility tree, capturing console/network/JS errors.
+- **Self-service sign-up** — personas register with synthetic identities when an
+  app gates a flow behind login (no real-name/verification walls).
+- **Reports** — prioritized bug clusters, per-persona UX feedback, session
+  traces (Playwright `trace.zip` + video), and token/cost accounting.
 
-## 상태
+Architecture and roadmap: see [PLAN.md](./PLAN.md).
 
-엔진 + 로컬 웹 앱 온보딩 플로우. API 키 없이도 Fake provider로 전체 플로우가 돈다.
+## Quick start
 
-- ✅ 페르소나 5차원 팩터 모델
-- ✅ 액션 스키마 + Playwright 매핑
-- ✅ 브라우저 observer (접근성 트리 + 콘솔/네트워크/JS 에러)
-- ✅ Observe-Think-Act-Verify 에이전트 루프
-- ✅ LLM provider 추상화 + 실제 Anthropic tool-use provider
-- ✅ 로컬 웹 앱 (FastAPI + HTMX/Jinja): Welcome → Provider 설정/연결테스트 →
-  프로젝트 생성/상세 → 테스트 실행 → 결과
-- ✅ SQLite 로컬 저장 (`~/.synthpanel/synthpanel.db`): 설정/프로젝트/실행이력
-- ✅ 페르소나 자동 추천기 (엣지케이스 포함, 프로젝트 생성에 통합)
-- ✅ 병렬 오케스트레이터 (Semaphore + asyncio.gather)
-- ✅ 리포트: 버그 집계 클러스터링 + Markdown/HTML 대시보드
-- ✅ 실시간 진행: 백그라운드 실행 + SSE 스트리밍
-- ✅ 실행 신뢰성: 세션 타임아웃/재시도, Playwright trace.zip·비디오, 토큰/비용 로깅
-- ✅ 페르소나 자가가입: 합성 신원으로 가입/로그인 수행, 인증 벽은 블로커 리포트, 시크릿 레닥션
-
-## 웹 앱 실행
+Requires [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
 
 ```bash
-uv run synthpanel serve                 # http://127.0.0.1:8000
-uv run playwright install chromium      # 실제 테스트 실행 시 (Fake provider는 불필요)
+uv sync                              # install dependencies into .venv
+uv run playwright install chromium   # browser used to drive test runs
+uv run synthpanel serve              # http://127.0.0.1:8000
 ```
 
-플로우: Welcome → "Get Started" → LLM provider 선택·설정·연결 테스트(성공 시 로컬 저장,
-다음부터 자동 적용) → 프로젝트 생성(URL·focus·페르소나) → 프로젝트 상세에서 테스트 실행.
+Then open **http://127.0.0.1:8000** and follow the flow:
 
-## 설치 (uv)
+1. **Get Started → choose an LLM provider.**
+   - *Fake (offline demo)* — no API key; personas run a scripted exploration.
+   - *Claude (Anthropic)* — enter an API key; the model drives each persona.
+     Connection is tested before the setting is saved and reused next time.
+2. **Create a project** — target URL, what to focus on, and a persona panel
+   (pick from the library or get an AI-recommended panel).
+3. **Run the test** — progress streams live; when it finishes you get the bug
+   list, common-issue ranking, per-persona feedback, token/cost, and downloadable
+   traces and video.
 
-프로젝트는 [uv](https://docs.astral.sh/uv/)로 관리합니다.
+Bind elsewhere with `uv run synthpanel serve --host 0.0.0.0 --port 8080`.
+
+To use the real Anthropic provider, also install the optional extra:
 
 ```bash
-uv sync                                 # 의존성 + dev 그룹 설치 (.venv 자동 생성)
-uv run playwright install chromium      # 브라우저 코어 사용 시
-uv sync --extra llm                     # 실제 Anthropic provider 사용 시
+uv sync --extra llm
 ```
 
-## 개발
+## Data
+
+Settings, projects, run history, and artifacts live under `~/.synthpanel/`
+(`synthpanel.db` and `artifacts/`). The last-used provider config is remembered,
+so subsequent sessions skip straight to your projects.
+
+## Development
 
 ```bash
-uv run pytest                # Fake provider 기반 단위 테스트 (브라우저/네트워크 불필요)
-uv run pytest -m e2e         # 실브라우저 e2e (chromium 필요)
-uv add <pkg>                 # 런타임 의존성 추가
-uv add --dev <pkg>           # 개발 의존성 추가
+uv run pytest             # fast, hermetic unit tests (no browser or network)
+uv run pytest -m e2e      # end-to-end tests against a real Chromium
 ```
-
-## CLI (초기)
-
-```bash
-uv run synthpanel version
-uv run synthpanel run --url https://example.com --persona-name "김순자" --max-steps 10 --provider fake
-```
-
-> 실제 LLM 연동·병렬 실행·리포트 생성은 후속 단계에서 추가됩니다.
