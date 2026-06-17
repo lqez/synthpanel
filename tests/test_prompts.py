@@ -21,3 +21,12 @@ def test_user_turn_includes_identity_and_signup_guidance():
     assert "verification" in text
     assert "give up" in text or "give_up" in text
     assert "SYNTHETIC IDENTITY" in text
+
+
+def test_system_prompt_frames_evaluation_and_closing_assessment():
+    from synthpanel.agent.prompts import SYSTEM_TEMPLATE
+
+    low = SYSTEM_TEMPLATE.lower()
+    assert "evaluat" in low                       # evaluation framing
+    assert "do not give up" in low                # don't bail on no-task sites
+    assert "overall assessment" in low            # require a closing summary
