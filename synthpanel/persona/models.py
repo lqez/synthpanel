@@ -99,6 +99,9 @@ class Persona(BaseModel):
 
     name: str
     archetype: str | None = None
+    # Free-text quirks/voice/backstory that make the persona distinctive,
+    # beyond the structured factors. See persona/personality.py.
+    personality: str | None = None
     demographics: Demographics = Field(default_factory=Demographics)
     tech: TechProfile = Field(default_factory=TechProfile)
     psych: Psychographics = Field(default_factory=Psychographics)

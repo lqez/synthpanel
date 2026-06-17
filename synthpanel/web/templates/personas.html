@@ -10,16 +10,24 @@
     {% if not personas %}<p class="muted">아직 저장된 페르소나가 없습니다.</p>{% endif %}
     {% for p in personas %}
       <div class="list-item">
-        <div>
+        <div style="max-width:80%">
           <strong>{{ p.name }}</strong>
           {% if p.archetype %}<span class="muted">— {{ p.archetype }}</span>{% endif %}
           <span class="pill">{{ p.source }}</span>
           <div class="muted">목표: {{ p.data.intent.goal }}</div>
+          {% if p.data.personality %}
+            <div class="muted" style="margin-top:4px">🎭 {{ p.data.personality }}</div>
+          {% endif %}
         </div>
-        <form method="post" action="/personas/{{ p.id }}/delete"
-              onsubmit="return confirm('삭제할까요?');">
-          <button class="btn secondary" type="submit">삭제</button>
-        </form>
+        <div style="display:flex;gap:6px">
+          <form method="post" action="/personas/{{ p.id }}/reroll">
+            <button class="btn secondary" type="submit" title="개성 재생성">🎲</button>
+          </form>
+          <form method="post" action="/personas/{{ p.id }}/delete"
+                onsubmit="return confirm('삭제할까요?');">
+            <button class="btn secondary" type="submit">삭제</button>
+          </form>
+        </div>
       </div>
     {% endfor %}
   </div>

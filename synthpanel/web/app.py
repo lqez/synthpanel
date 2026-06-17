@@ -142,6 +142,17 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         store.delete_persona(persona_id)
         return RedirectResponse("/personas", status_code=303)
 
+    @app.post("/personas/{persona_id}/reroll")
+    def persona_reroll(persona_id: int):
+        from synthpanel.persona.personality import random_personality
+
+        stored = store.get_persona(persona_id)
+        if stored:
+            persona = Persona.model_validate(stored["data"])
+            persona.personality = random_personality(persona)  # fresh, unseeded
+            store.update_persona(persona_id, persona.model_dump(exclude_none=True, exclude_defaults=True))
+        return RedirectResponse("/personas", status_code=303)
+
     # (e) project creation
     @app.get("/projects/new", response_class=HTMLResponse)
     def project_new(request: Request):
