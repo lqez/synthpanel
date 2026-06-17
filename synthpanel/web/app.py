@@ -71,17 +71,24 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
     def render(request: Request, template: str, *, status_code: int = 200, **ctx) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(request, template, ctx, status_code=status_code)
 
-    # (a) Welcome
+    # (a) Welcome — shows the saved provider config when there is one
     @app.get("/", response_class=HTMLResponse)
     def welcome(request: Request):
-        return render(request, "welcome.html")
+        return render(request, "welcome.html", settings=store.get_settings())
 
-    # branch after "Get Started": skip provider setup if we already have settings
+    # "바로 시작하기": validate the saved settings, then enter — or fix them.
     @app.get("/start")
-    def start():
-        if store.get_settings():
+    async def start():
+        settings = store.get_settings()
+        if not settings:
+            return RedirectResponse("/onboarding", status_code=303)
+        ok, message = await test_connection(settings["provider"], settings["config"])
+        if ok:
             return RedirectResponse("/projects", status_code=303)
-        return RedirectResponse("/onboarding", status_code=303)
+        from urllib.parse import urlencode
+
+        query = urlencode({"error": f"저장된 설정이 유효하지 않습니다: {message}"})
+        return RedirectResponse(f"/onboarding?{query}", status_code=303)
 
     def _form_config(form) -> dict:
         return {
