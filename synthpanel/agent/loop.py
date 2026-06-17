@@ -29,6 +29,7 @@ async def run_session(
     max_steps: int = 25,
     secrets: set[str] | None = None,
     language: str = "en",
+    focus: str = "",
 ) -> SessionResult:
     """Run one persona to its goal, giving up, or max_steps, and return results.
 
@@ -55,6 +56,7 @@ async def run_session(
             history=history,
             step_idx=step_idx,
             language=language,
+            focus=focus,
         )
         action = await llm.decide(turn)
 

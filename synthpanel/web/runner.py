@@ -49,6 +49,7 @@ async def execute_run(
             session_timeout=session_timeout,
             retries=retries,
             language=language,
+            focus=project.get("focus", ""),
             artifacts_dir=Path(artifacts_dir) if artifacts_dir else None,
             on_progress=on_progress,
         )
@@ -88,6 +89,7 @@ async def _run_with_playwright(
     session_timeout: float | None,
     retries: int,
     language: str,
+    focus: str,
     artifacts_dir: Path | None,
     on_progress: ProgressSink | None,
 ) -> list[SessionResult]:
@@ -118,6 +120,7 @@ async def _run_with_playwright(
                 session_timeout=session_timeout,
                 retries=retries,
                 language=language,
+                focus=focus,
                 on_progress=on_progress,
             )
         finally:

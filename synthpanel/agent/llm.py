@@ -25,6 +25,8 @@ class Turn(BaseModel):
     step_idx: int
     # Language code the agent should write its notes/bugs/feedback in.
     language: str = "en"
+    # Project-level test purpose: what the tester wants examined.
+    focus: str = ""
 
 
 @runtime_checkable

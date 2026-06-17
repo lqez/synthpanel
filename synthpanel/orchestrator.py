@@ -49,10 +49,11 @@ async def _run_once(
     llm: LLMProvider,
     max_steps: int,
     language: str,
+    focus: str,
 ) -> SessionResult:
     async with session_factory(persona) as session:
         result = await run_session(
-            persona, session, llm, max_steps=max_steps, language=language
+            persona, session, llm, max_steps=max_steps, language=language, focus=focus
         )
     # __aexit__ has run, so any trace path written on teardown is now available.
     result.trace_path = getattr(session, "trace_path", None)
@@ -70,6 +71,7 @@ async def run_panel(
     session_timeout: float | None = None,
     retries: int = 0,
     language: str = "en",
+    focus: str = "",
     on_progress: ProgressSink | None = None,
 ) -> list[SessionResult]:
     """Run every persona concurrently (capped), preserving input order in output.
@@ -83,7 +85,7 @@ async def run_panel(
     results: list[SessionResult | None] = [None] * total
 
     async def run_with_timeout(persona: Persona) -> SessionResult:
-        coro = _run_once(persona, session_factory, llm, max_steps, language)
+        coro = _run_once(persona, session_factory, llm, max_steps, language, focus)
         if session_timeout is not None:
             return await asyncio.wait_for(coro, timeout=session_timeout)
         return await coro
