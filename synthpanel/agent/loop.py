@@ -12,6 +12,7 @@ from typing import Awaitable, Callable
 
 from synthpanel.agent.actions import TERMINAL_ACTIONS, Action, ActionType
 from synthpanel.agent.llm import LLMProvider, Turn
+from synthpanel.agent.prompts import render_user_turn
 from synthpanel.browser.base import BrowserSession
 from synthpanel.persona.identity import synthetic_identity
 from synthpanel.persona.models import Persona
@@ -64,7 +65,13 @@ async def run_session(
             language=language,
             focus=focus,
         )
-        action = await llm.decide(turn)
+        llm_prompt = _redact(render_user_turn(turn), secret_values)
+        llm_error: str | None = None
+        try:
+            action = await llm.decide(turn)
+        except Exception as exc:  # noqa: BLE001
+            llm_error = f"{type(exc).__name__}: {exc}"
+            action = Action(type=ActionType.GIVE_UP, rationale=f"LLM error: {llm_error}")
 
         if on_step is not None:
             maybe = on_step(step_idx, action.type.value, observation.url)
@@ -78,7 +85,20 @@ async def run_session(
             action_target=action.target,
             action_value=_redact(action.value, secret_values),
             rationale=action.rationale,
+            llm_prompt=llm_prompt,
+            llm_error=llm_error,
         )
+
+        if llm_error:
+            result.bugs.append(
+                BugReport(
+                    title=f"LLM 오류 (스텝 {step_idx})",
+                    severity=Severity.CRITICAL,
+                    actual=llm_error,
+                    persona_name=persona.name,
+                    step_idx=step_idx,
+                )
+            )
 
         # --- Act / Verify ---
         if action.type in TERMINAL_ACTIONS:

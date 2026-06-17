@@ -107,7 +107,7 @@
 
   {% if run.result.sessions %}
     {% if same_goal %}
-      {# All personas share the same goal — show compact table, not full cards #}
+      {# All personas share the same goal — compact table + per-session LLM logs #}
       <div class="card">
         <h2>페르소나별 요약</h2>
         {% if common_goal %}
@@ -155,8 +155,14 @@
           </tbody>
         </table>
       </div>
+
+      {# LLM 통신 내역 — one block per session, collapsed by default #}
+      {% for s in run.result.sessions %}
+        {{ _llm_log(run.id, loop.index0, s) }}
+      {% endfor %}
+
     {% else %}
-      {# Different goals — show full per-persona cards #}
+      {# Different goals — full per-persona cards #}
       {% for s in run.result.sessions %}
         <div class="card">
           <h2>{{ s.persona_name }} <span class="pill">{{ s.status }}</span>
@@ -189,8 +195,77 @@
               {% endfor %}
             </ol>
           </details>
+
+          {{ _llm_log(run.id, loop.index0, s) }}
         </div>
       {% endfor %}
     {% endif %}
   {% endif %}
 {% endblock %}
+
+{# ──────────────────────────────────────────────────────────────────── #}
+{# Macro: collapsible LLM communication log for one session             #}
+{# ──────────────────────────────────────────────────────────────────── #}
+{% macro _llm_log(run_id, session_idx, s) %}
+  {% set has_errors = s.steps | selectattr("llm_error") | list | length > 0 %}
+  {% set has_prompts = s.steps | selectattr("llm_prompt") | list | length > 0 %}
+  {% if has_prompts or has_errors %}
+    <details class="card" style="margin-top:8px">
+      <summary style="cursor:pointer;font-weight:600">
+        🔌 LLM 통신 내역 — {{ s.persona_name }}
+        {% if has_errors %}
+          <span class="pill" style="background:#c0392b;color:#fff;margin-left:6px">에러 있음</span>
+        {% endif %}
+      </summary>
+
+      <p class="muted" style="font-size:.82rem;margin:8px 0 4px">
+        관찰 방식: <strong>DOM 접근성 트리 (ARIA snapshot)</strong> — 스크린샷 없음.
+        LLM은 각 스텝마다 아래 프롬프트 형태로 페이지를 텍스트로 받습니다.
+      </p>
+
+      {% for st in s.steps %}
+        <details style="margin:4px 0;border:1px solid #e0e0e0;border-radius:4px">
+          <summary style="padding:6px 8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:.88rem">
+            <span>
+              <strong>스텝 {{ st.step_idx }}</strong>
+              <code style="margin-left:6px">{{ st.action_type }}</code>
+              {% if st.action_target %}<span class="muted"> {{ st.action_target }}</span>{% endif %}
+              {% if st.rationale %}
+                <span class="muted" style="margin-left:6px">— {{ st.rationale | truncate(60) }}</span>
+              {% endif %}
+            </span>
+            {% if st.llm_error %}
+              <span class="pill" style="background:#c0392b;color:#fff;flex-shrink:0">에러</span>
+            {% else %}
+              <span class="pill" style="background:#27ae60;color:#fff;flex-shrink:0">OK</span>
+            {% endif %}
+          </summary>
+
+          <div style="padding:8px;background:#fafafa;font-size:.82rem">
+            {% if st.llm_error %}
+              <div style="color:#c0392b;background:#fdf0f0;padding:8px;border-radius:4px;margin-bottom:8px;font-family:monospace;white-space:pre-wrap">⚠ LLM 에러: {{ st.llm_error }}</div>
+            {% endif %}
+
+            {% if st.observation_digest %}
+              <details style="margin-bottom:6px">
+                <summary style="cursor:pointer;color:#555">페이지 요약 (observation digest)</summary>
+                <pre style="background:#f5f5f5;padding:8px;border-radius:4px;overflow:auto;max-height:200px;white-space:pre-wrap;margin:4px 0">{{ st.observation_digest }}</pre>
+              </details>
+            {% endif %}
+
+            {% if st.llm_prompt %}
+              <details>
+                <summary style="cursor:pointer;color:#555">LLM에 보낸 전체 프롬프트</summary>
+                <pre style="background:#f5f5f5;padding:8px;border-radius:4px;overflow:auto;max-height:400px;white-space:pre-wrap;margin:4px 0">{{ st.llm_prompt }}</pre>
+              </details>
+            {% endif %}
+
+            {% if st.rationale %}
+              <p style="margin:6px 0 0"><strong>LLM 판단 근거:</strong> {{ st.rationale }}</p>
+            {% endif %}
+          </div>
+        </details>
+      {% endfor %}
+    </details>
+  {% endif %}
+{% endmacro %}
