@@ -8,7 +8,8 @@
     {% if project.focus %}<p><strong>Focus:</strong> {{ project.focus }}</p>{% endif %}
     <p><strong>페르소나:</strong>
       {% for p in project.personas %}<span class="pill">{{ p.name }}</span> {% endfor %}
-      {% if not project.personas %}<span class="muted">기본 1명</span>{% endif %}
+      {% if not project.personas %}<span class="muted">없음 (기본 1명으로 실행)</span>{% endif %}
+      · <a href="/projects/{{ project.id }}/personas">편집</a>
     </p>
     <form method="post" action="/projects/{{ project.id }}/run">
       <button class="btn" type="submit">▶ 테스트 실행</button>

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}페르소나 준비 · {{ project.name }}{% endblock %}
+{% block body %}
+  <h1>페르소나 준비 <span class="muted" style="font-size:1rem">2 / 2 · {{ project.name }}</span></h1>
+  <p class="muted">{{ project.url }}{% if project.focus %} · {{ project.focus }}{% endif %}</p>
+
+  {# AI 자동 추천: 프로젝트의 URL/focus를 분석해 패널 제안 #}
+  <form method="post" action="/projects/{{ project.id }}/personas/recommend" class="card">
+    <h2>AI 페르소나 자동 추천</h2>
+    <p class="muted">이 프로젝트의 URL·focus를 분석해 엣지케이스를 포함한 패널을 제안합니다.</p>
+    <label>추천 인원</label>
+    <input type="text" name="count" value="5">
+    <p style="margin-top:14px"><button class="btn secondary" type="submit">✨ 추천 받기</button></p>
+  </form>
+
+  <form method="post" action="/projects/{{ project.id }}/personas" class="card">
+    {% if recommended %}
+      <label>추천된 페르소나</label>
+      <p class="muted">AI가 제안한 패널입니다. 빼고 싶은 항목은 체크 해제하세요.</p>
+      {% for p in recommended %}
+        <label class="check">
+          <input type="checkbox" name="personas" value="{{ p.token }}" checked>
+          <span><strong>{{ p.name }}</strong>
+            {% if p.archetype %}<span class="muted">— {{ p.archetype }}</span>{% endif %}
+            <br><span class="muted">목표: {{ p.goal }}</span></span>
+        </label>
+      {% endfor %}
+    {% endif %}
+
+    <label>라이브러리 페르소나</label>
+    {% for p in library %}
+      <label class="check">
+        <input type="checkbox" name="personas" value="{{ p.token }}"
+               {% if p.name in chosen or (not recommended and not chosen) %}checked{% endif %}>
+        <span><strong>{{ p.name }}</strong>
+          {% if p.archetype %}<span class="muted">— {{ p.archetype }}</span>{% endif %}
+          <br><span class="muted">목표: {{ p.goal }}</span></span>
+      </label>
+    {% endfor %}
+
+    <p style="margin-top:18px"><button class="btn" type="submit">저장하고 프로젝트로 →</button></p>
+  </form>
+{% endblock %}

@@ -259,6 +259,13 @@ class Store:
             )
             return int(cur.lastrowid)
 
+    def set_project_personas(self, project_id: int, personas: list[dict]) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE projects SET personas_json = ? WHERE id = ?",
+                (json.dumps(personas), project_id),
+            )
+
     def project_language(self, project: dict) -> str:
         """Effective report language: the project's, falling back to the global default."""
         return project.get("language") or self.get_language()

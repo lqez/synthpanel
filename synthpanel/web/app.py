@@ -185,49 +185,63 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             store.update_persona(persona_id, persona.model_dump(exclude_none=True, exclude_defaults=True))
         return RedirectResponse("/personas", status_code=303)
 
-    # (e) project creation
+    # (e) step 1 — project basics; then move on to persona preparation
     @app.get("/projects/new", response_class=HTMLResponse)
     def project_new(request: Request):
-        return render(
-            request,
-            "project_new.html",
-            library=_library_choices(),
-            recommended=[],
-            **_lang_ctx(),
-        )
-
-    # AI persona recommendation: re-renders the form with a recommended panel
-    # pre-selected, on top of the library choices. The user can still edit.
-    @app.post("/projects/recommend", response_class=HTMLResponse)
-    async def project_recommend(request: Request):
-        form = await request.form()
-        settings = store.get_settings() or {"provider": "fake", "config": {}}
-        personas = await recommend_personas(
-            url=(form.get("url") or "").strip(),
-            focus=(form.get("focus") or "").strip(),
-            n=int(form.get("count") or 5),
-            provider_key=settings["provider"],
-            config=settings["config"],
-        )
-        return render(
-            request,
-            "project_new.html",
-            library=_library_choices(),
-            recommended=_persona_choices(personas),
-            name=form.get("name", ""),
-            url=form.get("url", ""),
-            focus=form.get("focus", ""),
-            selected_language=form.get("language") or store.get_language(),
-            **_lang_ctx(),
-        )
+        return render(request, "project_new.html", **_lang_ctx())
 
     @app.post("/projects/new")
     async def project_create(request: Request):
         form = await request.form()
-        name = (form.get("name") or "Untitled").strip()
-        url = (form.get("url") or "").strip()
-        focus = (form.get("focus") or "").strip()
-        language = normalize(form.get("language"))
+        project_id = store.create_project(
+            name=(form.get("name") or "Untitled").strip(),
+            url=(form.get("url") or "").strip(),
+            focus=(form.get("focus") or "").strip(),
+            personas=[],
+            language=normalize(form.get("language")),
+        )
+        return RedirectResponse(f"/projects/{project_id}/personas", status_code=303)
+
+    # (e) step 2 — persona preparation for a project (library + AI recommend)
+    def _persona_setup(request, project, recommended=None):
+        chosen = {p.get("name") for p in project["personas"]}
+        return render(
+            request,
+            "project_personas.html",
+            project=project,
+            library=_library_choices(),
+            recommended=recommended or [],
+            chosen=chosen,
+        )
+
+    @app.get("/projects/{project_id}/personas", response_class=HTMLResponse)
+    def project_personas(request: Request, project_id: int):
+        project = store.get_project(project_id)
+        if not project:
+            return RedirectResponse("/projects", status_code=303)
+        return _persona_setup(request, project)
+
+    @app.post("/projects/{project_id}/personas/recommend", response_class=HTMLResponse)
+    async def project_personas_recommend(request: Request, project_id: int):
+        project = store.get_project(project_id)
+        if not project:
+            return RedirectResponse("/projects", status_code=303)
+        form = await request.form()
+        settings = store.get_settings() or {"provider": "fake", "config": {}}
+        personas = await recommend_personas(
+            url=project["url"],
+            focus=project["focus"],
+            n=int(form.get("count") or 5),
+            provider_key=settings["provider"],
+            config=settings["config"],
+        )
+        return _persona_setup(request, project, recommended=_persona_choices(personas))
+
+    @app.post("/projects/{project_id}/personas")
+    async def project_personas_save(request: Request, project_id: int):
+        if not store.get_project(project_id):
+            return RedirectResponse("/projects", status_code=303)
+        form = await request.form()
         personas: list[dict] = []
         for token in form.getlist("personas"):
             try:
@@ -238,7 +252,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             # and snapshot into the project so past runs stay reproducible.
             store.ensure_persona(data, source="custom")
             personas.append(data)
-        project_id = store.create_project(name, url, focus, personas, language=language)
+        store.set_project_personas(project_id, personas)
         return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
     # App-global default report language.
