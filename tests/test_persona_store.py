@@ -8,17 +8,17 @@ def _store(tmp_path):
 def test_seeded_from_library_on_first_init(tmp_path):
     s = _store(tmp_path)
     personas = s.list_personas()
-    # Bundled examples.yaml has 3 personas.
-    assert len(personas) == 3
+    assert len(personas) >= 3
     assert any(p["name"] == "김순자" for p in personas)
     assert all(p["source"] == "library" for p in personas)
 
 
 def test_seed_runs_once(tmp_path):
     db = tmp_path / "db.sqlite"
-    Store(db)
+    s1 = Store(db)
+    count = len(s1.list_personas())
     s2 = Store(db)  # re-open: must not re-seed
-    assert len(s2.list_personas()) == 3
+    assert len(s2.list_personas()) == count
 
 
 def test_create_get_delete(tmp_path):

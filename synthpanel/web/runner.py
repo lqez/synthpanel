@@ -26,9 +26,10 @@ async def execute_run(
     *,
     max_steps: int = 15,
     concurrency: int = 4,
-    session_timeout: float | None = 180.0,
+    session_timeout: float | None = 600.0,
     retries: int = 1,
     language: str = "en",
+    vision: bool = False,
     artifacts_dir: str | Path | None = None,
     on_progress: ProgressSink | None = None,
 ) -> dict:
@@ -50,6 +51,7 @@ async def execute_run(
             retries=retries,
             language=language,
             focus=project.get("focus", ""),
+            vision=vision,
             artifacts_dir=Path(artifacts_dir) if artifacts_dir else None,
             on_progress=on_progress,
         )
@@ -90,6 +92,7 @@ async def _run_with_playwright(
     retries: int,
     language: str,
     focus: str,
+    vision: bool,
     artifacts_dir: Path | None,
     on_progress: ProgressSink | None,
 ) -> list[SessionResult]:
@@ -106,6 +109,7 @@ async def _run_with_playwright(
                 return PlaywrightSession.create(
                     browser,
                     url,
+                    vision=vision,
                     artifacts_dir=adir,
                     trace=adir is not None,
                     record_video=adir is not None,

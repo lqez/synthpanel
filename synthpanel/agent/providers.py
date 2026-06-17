@@ -80,6 +80,27 @@ def available_providers() -> list[ProviderSpec]:
     return [p for p in PROVIDERS.values() if p.available]
 
 
+# Ollama model name fragments that indicate vision capability.
+_OLLAMA_VISION_KEYWORDS = (
+    "llava", "vision", "moondream", "pixtral", "minicpm-v",
+    "cogvlm", "bunny", "qwen2-vl", "internvl", "bakllava",
+)
+
+
+def supports_vision(provider_key: str, model: str | None) -> bool:
+    """Return True if this provider+model combination can process screenshots."""
+    model = (model or "").lower()
+    if provider_key == "anthropic":
+        # All Claude 3+ models are natively multimodal.
+        return True
+    if provider_key == "openai":
+        # GPT-3.5 is text-only; all modern GPT-4* and o-series models support vision.
+        return not model.startswith("gpt-3.5")
+    if provider_key == "ollama":
+        return any(kw in model for kw in _OLLAMA_VISION_KEYWORDS)
+    return False  # fake and unknown providers
+
+
 async def test_connection(provider_key: str, config: dict) -> tuple[bool, str]:
     """Validate credentials/model with a minimal call. Returns (ok, message)."""
     if provider_key == "fake":

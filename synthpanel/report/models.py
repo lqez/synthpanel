@@ -70,6 +70,8 @@ class StepTrace(BaseModel):
     rationale: str = ""
     result: str = ""
     ok: bool = True
+    llm_prompt: str | None = None   # full user-turn text sent to the LLM
+    llm_error: str | None = None    # exception message if the LLM call failed
 
 
 class SessionResult(BaseModel):

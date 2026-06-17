@@ -29,10 +29,13 @@ ProgressSink = Callable[["PanelProgress"], Awaitable[None] | None]
 @dataclass(frozen=True)
 class PanelProgress:
     persona_name: str
-    kind: str  # "start" | "finish"
+    kind: str  # "start" | "step" | "finish"
     index: int
     total: int
     status: str | None = None
+    step_idx: int | None = None
+    action_type: str | None = None
+    url: str | None = None
 
 
 async def _emit(sink: ProgressSink | None, event: PanelProgress) -> None:
@@ -50,10 +53,23 @@ async def _run_once(
     max_steps: int,
     language: str,
     focus: str,
+    on_progress: ProgressSink | None = None,
+    index: int = 0,
+    total: int = 1,
 ) -> SessionResult:
+    async def _on_step(step_idx: int, action_type: str, url: str | None) -> None:
+        await _emit(
+            on_progress,
+            PanelProgress(
+                persona.name, "step", index, total,
+                step_idx=step_idx, action_type=action_type, url=url,
+            ),
+        )
+
     async with session_factory(persona) as session:
         result = await run_session(
-            persona, session, llm, max_steps=max_steps, language=language, focus=focus
+            persona, session, llm, max_steps=max_steps, language=language, focus=focus,
+            on_step=_on_step,
         )
     # __aexit__ has run, so any trace path written on teardown is now available.
     result.trace_path = getattr(session, "trace_path", None)
@@ -84,13 +100,13 @@ async def run_panel(
     sem = asyncio.Semaphore(max(1, concurrency))
     results: list[SessionResult | None] = [None] * total
 
-    async def run_with_timeout(persona: Persona) -> SessionResult:
-        coro = _run_once(persona, session_factory, llm, max_steps, language, focus)
-        if session_timeout is not None:
-            return await asyncio.wait_for(coro, timeout=session_timeout)
-        return await coro
-
     async def worker(index: int, persona: Persona) -> None:
+        async def run_with_timeout(p: Persona) -> SessionResult:
+            coro = _run_once(p, session_factory, llm, max_steps, language, focus, on_progress, index, total)
+            if session_timeout is not None:
+                return await asyncio.wait_for(coro, timeout=session_timeout)
+            return await coro
+
         async with sem:
             await _emit(on_progress, PanelProgress(persona.name, "start", index, total))
             result = await _attempt(persona, run_with_timeout, retries)

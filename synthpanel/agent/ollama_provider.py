@@ -39,10 +39,10 @@ _ACT_TOOL = {
 
 
 class OllamaProvider:
-    def __init__(self, host: str, model: str) -> None:
+    def __init__(self, host: str, model: str, timeout: float = 300.0) -> None:
         from ollama import AsyncClient
 
-        self._client = AsyncClient(host=host or _DEFAULT_HOST)
+        self._client = AsyncClient(host=host or _DEFAULT_HOST, timeout=timeout)
         self._model = model
         self.usage: dict[str, int] = {"input": 0, "output": 0}
 
