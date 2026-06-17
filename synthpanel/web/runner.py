@@ -30,6 +30,7 @@ async def execute_run(
     retries: int = 1,
     language: str = "en",
     vision: bool = False,
+    focus: str = "",
     artifacts_dir: str | Path | None = None,
     on_progress: ProgressSink | None = None,
 ) -> dict:
@@ -50,7 +51,7 @@ async def execute_run(
             session_timeout=session_timeout,
             retries=retries,
             language=language,
-            focus=project.get("focus", ""),
+            focus=focus,
             vision=vision,
             artifacts_dir=Path(artifacts_dir) if artifacts_dir else None,
             on_progress=on_progress,
