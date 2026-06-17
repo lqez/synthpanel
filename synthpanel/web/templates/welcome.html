@@ -6,13 +6,18 @@
 
   {% if settings %}
     <div class="card">
-      <p>저장된 LLM 설정이 있습니다:
+      <p>저장된 LLM 설정:
         <span class="pill">{{ settings.provider }}</span>
         {% if settings.config.model %}<code>{{ settings.config.model }}</code>{% endif %}
       </p>
-      <p class="muted">시작 시 이 설정이 유효한지 확인한 뒤 들어갑니다.</p>
-      <a class="btn" href="/start">바로 시작하기 →</a>
-      <a class="btn secondary" href="/onboarding">설정 변경</a>
+      {% if status_ok %}
+        <p style="color:#1a7f37">✓ 연결됨 — {{ status_message }}</p>
+        <a class="btn" href="/projects">시작하기 →</a>
+        <a class="btn secondary" href="/onboarding">설정 변경</a>
+      {% else %}
+        <div class="error">✗ 연결 실패 — {{ status_message }}</div>
+        <a class="btn" href="/onboarding">설정 변경</a>
+      {% endif %}
     </div>
   {% else %}
     <div class="card">

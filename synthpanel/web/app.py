@@ -71,24 +71,29 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
     def render(request: Request, template: str, *, status_code: int = 200, **ctx) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(request, template, ctx, status_code=status_code)
 
-    # (a) Welcome — shows the saved provider config when there is one
+    # (a) Welcome — when settings exist, test the connection now and show status
     @app.get("/", response_class=HTMLResponse)
-    def welcome(request: Request):
-        return render(request, "welcome.html", settings=store.get_settings())
-
-    # "바로 시작하기": validate the saved settings, then enter — or fix them.
-    @app.get("/start")
-    async def start():
+    async def welcome(request: Request):
         settings = store.get_settings()
-        if not settings:
-            return RedirectResponse("/onboarding", status_code=303)
-        ok, message = await test_connection(settings["provider"], settings["config"])
-        if ok:
-            return RedirectResponse("/projects", status_code=303)
-        from urllib.parse import urlencode
+        status_ok: bool | None = None
+        status_message = ""
+        if settings:
+            status_ok, status_message = await test_connection(
+                settings["provider"], settings["config"]
+            )
+        return render(
+            request,
+            "welcome.html",
+            settings=settings,
+            status_ok=status_ok,
+            status_message=status_message,
+        )
 
-        query = urlencode({"error": f"저장된 설정이 유효하지 않습니다: {message}"})
-        return RedirectResponse(f"/onboarding?{query}", status_code=303)
+    @app.get("/start")
+    def start():
+        if store.get_settings():
+            return RedirectResponse("/projects", status_code=303)
+        return RedirectResponse("/onboarding", status_code=303)
 
     def _form_config(form) -> dict:
         return {

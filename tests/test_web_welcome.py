@@ -1,4 +1,4 @@
-"""Welcome screen shows saved settings; /start validates before entering."""
+"""Welcome screen tests the saved settings on load and shows status inline."""
 
 from __future__ import annotations
 
@@ -20,31 +20,33 @@ def test_welcome_first_time_shows_get_started(client):
     assert "Get Started" in page.text
 
 
-def test_welcome_shows_saved_settings_and_start_button(client):
-    client.post("/onboarding", data={"provider": "fake"})
-    page = client.get("/")
-    assert "바로 시작하기" in page.text
-    assert "fake" in page.text  # saved provider shown
-
-
-def test_start_validates_and_enters_when_valid(client):
+def test_welcome_shows_connected_status_and_start(client):
     client.post("/onboarding", data={"provider": "fake"})  # fake always connects
-    r = client.get("/start", follow_redirects=False)
-    assert r.headers["location"] == "/projects"
+    page = client.get("/")
+    assert "fake" in page.text          # saved provider shown
+    assert "연결됨" in page.text          # status checked on load
+    assert 'href="/projects"' in page.text  # can start
 
 
-def test_start_redirects_to_onboarding_with_error_when_invalid(client, monkeypatch):
+def test_welcome_shows_failure_status(client, monkeypatch):
     client.post("/onboarding", data={"provider": "fake"})
 
     async def fail(provider, config):
         return False, "stale key"
 
     monkeypatch.setattr("synthpanel.web.app.test_connection", fail)
+    page = client.get("/")
+    assert "연결 실패" in page.text
+    assert "stale key" in page.text
+    # No start button on failure; only the settings link.
+    assert 'href="/projects"' not in page.text
+    assert 'href="/onboarding"' in page.text
+
+
+def test_start_enters_when_settings_exist(client):
+    client.post("/onboarding", data={"provider": "fake"})
     r = client.get("/start", follow_redirects=False)
-    loc = r.headers["location"]
-    assert loc.startswith("/onboarding?")
-    # The error is surfaced on the onboarding page.
-    assert "유효하지" in client.get(loc).text
+    assert r.headers["location"] == "/projects"
 
 
 def test_start_without_settings_goes_to_onboarding(client):
