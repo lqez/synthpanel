@@ -150,6 +150,19 @@ class Store:
             return int(row["id"])
         return self.create_persona(data, source=source)
 
+    def vote_persona(self, persona_id: int, delta: int) -> None:
+        """Adjust a persona's score by +1 / -1."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE personas SET votes = votes + ? WHERE id = ?", (delta, persona_id)
+            )
+
+    def toggle_favorite(self, persona_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE personas SET favorite = 1 - favorite WHERE id = ?", (persona_id,)
+            )
+
     def update_persona(self, persona_id: int, data: dict) -> None:
         with self._connect() as conn:
             conn.execute(

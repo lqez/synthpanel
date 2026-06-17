@@ -142,6 +142,18 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         store.delete_persona(persona_id)
         return RedirectResponse("/personas", status_code=303)
 
+    @app.post("/personas/{persona_id}/vote")
+    async def persona_vote(persona_id: int, request: Request):
+        form = await request.form()
+        delta = 1 if (form.get("dir") == "up") else -1
+        store.vote_persona(persona_id, delta)
+        return RedirectResponse("/personas", status_code=303)
+
+    @app.post("/personas/{persona_id}/favorite")
+    def persona_favorite(persona_id: int):
+        store.toggle_favorite(persona_id)
+        return RedirectResponse("/personas", status_code=303)
+
     @app.post("/personas/{persona_id}/reroll")
     def persona_reroll(persona_id: int):
         from synthpanel.persona.personality import random_personality
