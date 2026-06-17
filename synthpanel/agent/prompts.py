@@ -47,8 +47,11 @@ def render_user_turn(turn: Turn) -> str:
         f"feedback in {lang}, regardless of the page's own language. Keep literal UI "
         f"labels you quote as-is."
     )
+    personality = turn.persona.personality
+    personality_block = f"PERSONALITY:\n{personality}\n\n" if personality else ""
     return (
         f"PERSONA:\n{render_persona(turn.persona)}\n\n"
+        f"{personality_block}"
         f"GOAL: {turn.persona.intent.goal}\n\n"
         f"{language_line}\n\n"
         f"SIGN-UP / LOGIN:\n{_SIGNUP_GUIDANCE}\n\n"

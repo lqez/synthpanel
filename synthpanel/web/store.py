@@ -97,6 +97,7 @@ class Store:
         if count:
             return
         from synthpanel.persona.loader import load_personas
+        from synthpanel.persona.personality import random_personality
 
         examples = (
             Path(__file__).parent.parent / "persona" / "library" / "examples.yaml"
@@ -104,6 +105,8 @@ class Store:
         if not examples.exists():
             return
         for persona in load_personas(examples):
+            if not persona.personality:
+                persona.personality = random_personality(persona, seed=persona.name)
             self.create_persona(
                 persona.model_dump(exclude_none=True, exclude_defaults=True),
                 source="library",
@@ -146,6 +149,13 @@ class Store:
         if row:
             return int(row["id"])
         return self.create_persona(data, source=source)
+
+    def update_persona(self, persona_id: int, data: dict) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE personas SET name = ?, archetype = ?, data_json = ? WHERE id = ?",
+                (data.get("name", "Unnamed"), data.get("archetype"), json.dumps(data), persona_id),
+            )
 
     def delete_persona(self, persona_id: int) -> None:
         with self._connect() as conn:

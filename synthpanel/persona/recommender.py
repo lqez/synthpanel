@@ -123,13 +123,24 @@ async def recommend_personas(
 ) -> list[Persona]:
     """Recommend `n` personas, using the LLM when available, else heuristic."""
     context = AppContext(url=url, focus=focus)
+    personas: list[Persona] = []
     if provider_key == "anthropic":
         try:
             from synthpanel.persona.llm_recommender import recommend_with_anthropic
 
             personas = await recommend_with_anthropic(context, n, config)
-            if personas:
-                return personas
         except Exception:  # noqa: BLE001 - never hard-fail recommendation
-            pass
-    return heuristic_panel(context, n)
+            personas = []
+    if not personas:
+        personas = heuristic_panel(context, n)
+    return _ensure_personality(personas)
+
+
+def _ensure_personality(personas: list[Persona]) -> list[Persona]:
+    """Give each persona a stable randomized personality if it lacks one."""
+    from synthpanel.persona.personality import random_personality
+
+    for persona in personas:
+        if not persona.personality:
+            persona.personality = random_personality(persona, seed=persona.name)
+    return personas
