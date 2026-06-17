@@ -76,6 +76,9 @@ async def run_session(
                 if action.type is ActionType.DONE
                 else SessionStatus.GAVE_UP
             )
+            # Capture the persona's closing assessment as feedback.
+            if action.value:
+                result.ux_feedback += (_redact(action.value, secret_values) or "") + "\n"
             trace.result = action.type.value
             result.steps.append(trace)
             history.append(_summarize(action, trace.result, secret_values))

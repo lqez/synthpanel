@@ -95,3 +95,26 @@ async def test_caller_supplied_secret_redacted():
     llm = FakeLLM(script=[Action(type=ActionType.TYPE, target="x", value="hunter2-secret")])
     result = await run_session(persona, browser, llm, max_steps=2, secrets={"hunter2-secret"})
     assert result.steps[0].action_value == "***"
+
+
+async def test_terminal_action_value_captured_as_feedback():
+    persona = _persona()
+    browser = FakeBrowser()
+    llm = FakeLLM(
+        script=[
+            Action(
+                type=ActionType.GIVE_UP,
+                value="Clean design but no clear call to action; content is thin.",
+            )
+        ]
+    )
+    result = await run_session(persona, browser, llm, max_steps=3)
+    assert result.status is SessionStatus.GAVE_UP
+    assert "Clean design" in result.ux_feedback
+
+
+async def test_done_assessment_captured_as_feedback():
+    llm = FakeLLM(script=[Action(type=ActionType.DONE, value="Accessible and on-purpose.")])
+    result = await run_session(_persona(), FakeBrowser(), llm, max_steps=2)
+    assert result.status is SessionStatus.SUCCESS
+    assert "Accessible and on-purpose." in result.ux_feedback
