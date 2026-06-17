@@ -4,8 +4,8 @@ Each provider declares the config fields the web onboarding form should render,
 plus a default model. The agent loop stays provider-agnostic via LLMProvider;
 this module is the single place that knows about concrete providers.
 
-Only Claude (Anthropic) and the offline Fake provider are wired up now; OpenAI
-(Codex) and local Ollama are declared as placeholders for later steps.
+Only Claude (Anthropic), local Ollama, and the offline Fake provider are wired
+up; OpenAI (Codex) is declared as a placeholder for later.
 """
 
 from __future__ import annotations
@@ -61,8 +61,12 @@ PROVIDERS: dict[str, ProviderSpec] = {
         key="ollama",
         label="Local (Ollama)",
         default_model="llama3.1",
-        fields=[ProviderField("base_url", "Base URL", placeholder="http://localhost:11434/v1")],
-        available=False,
+        fields=[
+            ProviderField(
+                "base_url", "Base URL", required=False, placeholder="http://localhost:11434"
+            ),
+            ProviderField("model", "Model", placeholder="llama3.1"),
+        ],
     ),
 }
 
@@ -79,6 +83,10 @@ async def test_connection(provider_key: str, config: dict) -> tuple[bool, str]:
         from synthpanel.agent.anthropic_provider import test_anthropic_connection
 
         return await test_anthropic_connection(config)
+    if provider_key == "ollama":
+        from synthpanel.agent.ollama_provider import test_ollama_connection
+
+        return await test_ollama_connection(config)
     return False, f"provider '{provider_key}' is not available yet"
 
 
@@ -99,4 +107,9 @@ def build_provider(provider_key: str, config: dict) -> LLMProvider:
 
         model = config.get("model") or PROVIDERS["anthropic"].default_model
         return AnthropicProvider(api_key=config["api_key"], model=model)
+    if provider_key == "ollama":
+        from synthpanel.agent.ollama_provider import OllamaProvider
+
+        model = config.get("model") or PROVIDERS["ollama"].default_model
+        return OllamaProvider(host=config.get("base_url", ""), model=model)
     raise ValueError(f"provider '{provider_key}' is not available yet")

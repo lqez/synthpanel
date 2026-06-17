@@ -33,7 +33,10 @@ Then open **http://127.0.0.1:8000** and follow the flow:
 1. **Get Started → choose an LLM provider.**
    - *Fake (offline demo)* — no API key; personas run a scripted exploration.
    - *Claude (Anthropic)* — enter an API key; the model drives each persona.
-     Connection is tested before the setting is saved and reused next time.
+   - *Local (Ollama)* — point at a running Ollama server and a tool-capable
+     model (e.g. `llama3.1`); runs fully locally, no API key.
+
+   The connection is tested before the setting is saved and reused next time.
 2. **Create a project** — target URL, what to focus on, and a persona panel
    (pick from the library or get an AI-recommended panel).
 3. **Run the test** — progress streams live; when it finishes you get the bug
