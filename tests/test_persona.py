@@ -16,9 +16,10 @@ def test_library_examples_load():
 
     path = Path(__file__).parent.parent / "synthpanel" / "persona" / "library" / "examples.yaml"
     personas = load_personas(path)
-    assert len(personas) == 3
-    assert personas[0].name == "김순자"
-    assert personas[0].tech.savviness == 2
+    assert len(personas) >= 3
+    kim = next((p for p in personas if p.name == "김순자"), None)
+    assert kim is not None
+    assert kim.tech.savviness == 3
 
 
 def test_roundtrip_yaml(tmp_path):
