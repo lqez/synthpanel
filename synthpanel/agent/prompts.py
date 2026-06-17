@@ -49,10 +49,17 @@ def render_user_turn(turn: Turn) -> str:
     )
     personality = turn.persona.personality
     personality_block = f"PERSONALITY:\n{personality}\n\n" if personality else ""
+    focus_block = (
+        f"TEST FOCUS (what the tester especially wants examined — keep this in "
+        f"mind and call out anything related as you go):\n{turn.focus}\n\n"
+        if turn.focus.strip()
+        else ""
+    )
     return (
         f"PERSONA:\n{render_persona(turn.persona)}\n\n"
         f"{personality_block}"
         f"GOAL: {turn.persona.intent.goal}\n\n"
+        f"{focus_block}"
         f"{language_line}\n\n"
         f"SIGN-UP / LOGIN:\n{_SIGNUP_GUIDANCE}\n\n"
         f"SYNTHETIC IDENTITY:\n{identity.as_prompt_block()}\n\n"

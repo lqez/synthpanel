@@ -25,8 +25,10 @@
     <label>대상 URL</label>
     <input type="url" name="url" value="{{ url or '' }}" placeholder="https://my-vibe-app.dev" required>
 
-    <label>무엇을 중점적으로 테스트할까요? (focus)</label>
-    <textarea name="focus" rows="3" placeholder="예: 회원가입부터 결제까지의 흐름">{{ focus or '' }}</textarea>
+    <label>테스트 목적 / 중점 (focus)</label>
+    <p class="muted">무엇을 봐달라는지 적어주세요. 실행 시 각 페르소나에게 그대로 전달됩니다.</p>
+    <textarea name="focus" rows="3"
+      placeholder="예: 회원가입부터 결제까지의 흐름에서 막히는 지점, 모바일에서의 버튼 접근성">{{ focus or '' }}</textarea>
 
     <label>리포트 언어</label>
     <p class="muted">버그·UX 피드백을 이 언어로 작성합니다. (기본: 전역 설정)</p>
