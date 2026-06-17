@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}새 페르소나 생성 · SynthPanel{% endblock %}
+{% block body %}
+  <p><a href="/personas">← 페르소나 라이브러리</a></p>
+  <h1>새 페르소나 생성</h1>
+
+  <form method="post" action="/personas/new/generate" class="card">
+    <h2>LLM으로 생성</h2>
+    <p class="muted">어떤 유형의 페르소나가 필요한지 설명하면 LLM이 생성합니다.
+      설명 없이 생성하면 다양한 배경의 일반 사용자를 제안합니다.</p>
+    <label>설명 <span class="muted" style="font-weight:400">— 선택사항</span></label>
+    <textarea name="description" rows="3"
+      placeholder="예: 접근성 보조기기를 사용하는 사용자 / 50대 이상 비기술 사용자 / 모바일 저사양 환경">{{ description }}</textarea>
+    <label>생성 수</label>
+    <input type="text" name="count" value="{{ count }}" style="width:80px">
+    <p style="margin-top:14px">
+      <button class="btn secondary" type="submit">✨ 생성</button>
+    </p>
+  </form>
+
+  {% if generated %}
+    <form method="post" action="/personas/new" class="card">
+      <label>생성된 페르소나</label>
+      <p class="muted">저장할 항목을 선택한 뒤 라이브러리에 추가하세요.</p>
+      {% for p in generated %}
+        <label class="check">
+          <input type="checkbox" name="personas" value="{{ p.token }}" checked>
+          <span>
+            <strong>{{ p.name }}</strong>
+            {% if p.archetype %}<span class="muted">— {{ p.archetype }}</span>{% endif %}
+            {% if p.region %}<span class="muted" style="font-size:.8rem">· {{ p.region }}</span>{% endif %}
+            <br><span class="muted">목표: {{ p.goal }}</span>
+          </span>
+        </label>
+      {% endfor %}
+      <p style="margin-top:14px">
+        <button class="btn" type="submit">라이브러리에 추가 →</button>
+      </p>
+    </form>
+  {% endif %}
+{% endblock %}
