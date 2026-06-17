@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}페르소나 라이브러리 · SynthPanel{% endblock %}
+{% block body %}
+  <p><a href="/projects">← 프로젝트</a></p>
+  <h1>페르소나 라이브러리</h1>
+  <p class="muted">저장된 페르소나입니다. 프로젝트에서 선택해 재사용하며, 추천받은 페르소나도
+    프로젝트에 쓰면 여기에 보관됩니다.</p>
+
+  <div class="card">
+    {% if not personas %}<p class="muted">아직 저장된 페르소나가 없습니다.</p>{% endif %}
+    {% for p in personas %}
+      <div class="list-item">
+        <div>
+          <strong>{{ p.name }}</strong>
+          {% if p.archetype %}<span class="muted">— {{ p.archetype }}</span>{% endif %}
+          <span class="pill">{{ p.source }}</span>
+          <div class="muted">목표: {{ p.data.intent.goal }}</div>
+        </div>
+        <form method="post" action="/personas/{{ p.id }}/delete"
+              onsubmit="return confirm('삭제할까요?');">
+          <button class="btn secondary" type="submit">삭제</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}

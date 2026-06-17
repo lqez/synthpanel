@@ -72,12 +72,97 @@ class Store:
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (project_id) REFERENCES projects (id)
                 );
+                CREATE TABLE IF NOT EXISTS personas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    archetype TEXT,
+                    data_json TEXT NOT NULL,
+                    votes INTEGER NOT NULL DEFAULT 0,
+                    favorite INTEGER NOT NULL DEFAULT 0,
+                    source TEXT NOT NULL DEFAULT 'library',
+                    created_at TEXT NOT NULL
+                );
                 """
             )
             # Lightweight migration: add projects.language to older DBs.
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(projects)")}
             if "language" not in cols:
                 conn.execute("ALTER TABLE projects ADD COLUMN language TEXT")
+        self._seed_personas()
+
+    def _seed_personas(self) -> None:
+        """Populate the persona library from the bundled examples on first run."""
+        with self._connect() as conn:
+            count = conn.execute("SELECT COUNT(*) AS n FROM personas").fetchone()["n"]
+        if count:
+            return
+        from synthpanel.persona.loader import load_personas
+
+        examples = (
+            Path(__file__).parent.parent / "persona" / "library" / "examples.yaml"
+        )
+        if not examples.exists():
+            return
+        for persona in load_personas(examples):
+            self.create_persona(
+                persona.model_dump(exclude_none=True, exclude_defaults=True),
+                source="library",
+            )
+
+    # --- personas (library) ---
+
+    def list_personas(self) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM personas ORDER BY favorite DESC, votes DESC, created_at"
+            ).fetchall()
+        return [self._persona_row(r) for r in rows]
+
+    def get_persona(self, persona_id: int) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM personas WHERE id = ?", (persona_id,)
+            ).fetchone()
+        return self._persona_row(row) if row else None
+
+    def create_persona(self, data: dict, source: str = "custom") -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO personas (name, archetype, data_json, source, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (data.get("name", "Unnamed"), data.get("archetype"), json.dumps(data), source, _now()),
+            )
+            return int(cur.lastrowid)
+
+    def ensure_persona(self, data: dict, source: str = "custom") -> int:
+        """Insert the persona if no library entry shares its name; return its id."""
+        name = data.get("name", "Unnamed")
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM personas WHERE name = ?", (name,)
+            ).fetchone()
+        if row:
+            return int(row["id"])
+        return self.create_persona(data, source=source)
+
+    def delete_persona(self, persona_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM personas WHERE id = ?", (persona_id,))
+
+    @staticmethod
+    def _persona_row(row: sqlite3.Row) -> dict:
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "archetype": row["archetype"],
+            "data": json.loads(row["data_json"]),
+            "votes": row["votes"],
+            "favorite": bool(row["favorite"]),
+            "source": row["source"],
+            "created_at": row["created_at"],
+        }
 
     # --- preferences (app-global) ---
 
