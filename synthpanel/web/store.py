@@ -51,6 +51,11 @@ class Store:
                     config_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS preferences (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    language TEXT NOT NULL DEFAULT 'en'
+                );
+                INSERT OR IGNORE INTO preferences (id, language) VALUES (1, 'en');
                 CREATE TABLE IF NOT EXISTS projects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
@@ -68,6 +73,25 @@ class Store:
                     FOREIGN KEY (project_id) REFERENCES projects (id)
                 );
                 """
+            )
+            # Lightweight migration: add projects.language to older DBs.
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(projects)")}
+            if "language" not in cols:
+                conn.execute("ALTER TABLE projects ADD COLUMN language TEXT")
+
+    # --- preferences (app-global) ---
+
+    def get_language(self) -> str:
+        with self._connect() as conn:
+            row = conn.execute("SELECT language FROM preferences WHERE id = 1").fetchone()
+        return row["language"] if row else "en"
+
+    def set_language(self, language: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO preferences (id, language) VALUES (1, ?) "
+                "ON CONFLICT(id) DO UPDATE SET language = excluded.language",
+                (language,),
             )
 
     # --- settings (last-used provider config) ---
@@ -110,26 +134,37 @@ class Store:
         return self._project_row(row) if row else None
 
     def create_project(
-        self, name: str, url: str, focus: str, personas: list[dict]
+        self,
+        name: str,
+        url: str,
+        focus: str,
+        personas: list[dict],
+        language: str | None = None,
     ) -> int:
         with self._connect() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO projects (name, url, focus, personas_json, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO projects (name, url, focus, personas_json, language, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (name, url, focus, json.dumps(personas), _now()),
+                (name, url, focus, json.dumps(personas), language, _now()),
             )
             return int(cur.lastrowid)
 
+    def project_language(self, project: dict) -> str:
+        """Effective report language: the project's, falling back to the global default."""
+        return project.get("language") or self.get_language()
+
     @staticmethod
     def _project_row(row: sqlite3.Row) -> dict:
+        keys = row.keys()
         return {
             "id": row["id"],
             "name": row["name"],
             "url": row["url"],
             "focus": row["focus"],
             "personas": json.loads(row["personas_json"]),
+            "language": row["language"] if "language" in keys else None,
             "created_at": row["created_at"],
         }
 

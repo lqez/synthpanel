@@ -33,6 +33,7 @@ from synthpanel.persona.loader import load_personas
 from synthpanel.persona.models import Persona
 from synthpanel.persona.recommender import recommend_personas
 from synthpanel.report.aggregate import aggregate
+from synthpanel.report.languages import LANGUAGES, normalize
 from synthpanel.report.models import SessionResult
 from synthpanel.report.render import render_html, render_markdown
 from synthpanel.web.progress import RunBroker
@@ -126,6 +127,9 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             return RedirectResponse("/projects/new", status_code=303)
         return render(request, "projects.html", projects=items, settings=store.get_settings())
 
+    def _lang_ctx() -> dict:
+        return {"languages": LANGUAGES, "default_language": store.get_language()}
+
     # (e) project creation
     @app.get("/projects/new", response_class=HTMLResponse)
     def project_new(request: Request):
@@ -134,6 +138,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             "project_new.html",
             library=_persona_choices(load_personas(_LIBRARY)),
             recommended=[],
+            **_lang_ctx(),
         )
 
     # AI persona recommendation: re-renders the form with a recommended panel
@@ -157,6 +162,8 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             name=form.get("name", ""),
             url=form.get("url", ""),
             focus=form.get("focus", ""),
+            selected_language=form.get("language") or store.get_language(),
+            **_lang_ctx(),
         )
 
     @app.post("/projects/new")
@@ -165,14 +172,26 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         name = (form.get("name") or "Untitled").strip()
         url = (form.get("url") or "").strip()
         focus = (form.get("focus") or "").strip()
+        language = normalize(form.get("language"))
         personas: list[dict] = []
         for token in form.getlist("personas"):
             try:
                 personas.append(_decode_persona(token))
             except Exception:  # noqa: BLE001 - ignore tampered/invalid tokens
                 continue
-        project_id = store.create_project(name, url, focus, personas)
+        project_id = store.create_project(name, url, focus, personas, language=language)
         return RedirectResponse(f"/projects/{project_id}", status_code=303)
+
+    # App-global default report language.
+    @app.get("/preferences", response_class=HTMLResponse)
+    def preferences(request: Request):
+        return render(request, "preferences.html", current=store.get_language(), **_lang_ctx())
+
+    @app.post("/preferences")
+    async def preferences_save(request: Request):
+        form = await request.form()
+        store.set_language(normalize(form.get("language")))
+        return RedirectResponse("/projects", status_code=303)
 
     # (f) project detail
     @app.get("/projects/{project_id}", response_class=HTMLResponse)
@@ -204,6 +223,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             result = await execute_run(
                 project,
                 settings,
+                language=store.project_language(project),
                 artifacts_dir=store.artifacts_dir(run_id),
                 on_progress=on_progress,
             )

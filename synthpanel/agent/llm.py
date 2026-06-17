@@ -23,6 +23,8 @@ class Turn(BaseModel):
     observation: Observation
     history: list[str]
     step_idx: int
+    # Language code the agent should write its notes/bugs/feedback in.
+    language: str = "en"
 
 
 @runtime_checkable

@@ -28,6 +28,15 @@
     <label>무엇을 중점적으로 테스트할까요? (focus)</label>
     <textarea name="focus" rows="3" placeholder="예: 회원가입부터 결제까지의 흐름">{{ focus or '' }}</textarea>
 
+    <label>리포트 언어</label>
+    <p class="muted">버그·UX 피드백을 이 언어로 작성합니다. (기본: 전역 설정)</p>
+    <select name="language">
+      {% set chosen = selected_language or default_language %}
+      {% for code, names in languages.items() %}
+        <option value="{{ code }}" {% if code == chosen %}selected{% endif %}>{{ names[1] }}</option>
+      {% endfor %}
+    </select>
+
     {% if recommended %}
       <label>추천된 페르소나</label>
       <p class="muted">AI가 제안한 패널입니다. 빼고 싶은 항목은 체크 해제하세요.</p>

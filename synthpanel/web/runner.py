@@ -28,6 +28,7 @@ async def execute_run(
     concurrency: int = 4,
     session_timeout: float | None = 180.0,
     retries: int = 1,
+    language: str = "en",
     artifacts_dir: str | Path | None = None,
     on_progress: ProgressSink | None = None,
 ) -> dict:
@@ -47,6 +48,7 @@ async def execute_run(
             concurrency=concurrency,
             session_timeout=session_timeout,
             retries=retries,
+            language=language,
             artifacts_dir=Path(artifacts_dir) if artifacts_dir else None,
             on_progress=on_progress,
         )
@@ -85,6 +87,7 @@ async def _run_with_playwright(
     concurrency: int,
     session_timeout: float | None,
     retries: int,
+    language: str,
     artifacts_dir: Path | None,
     on_progress: ProgressSink | None,
 ) -> list[SessionResult]:
@@ -114,6 +117,7 @@ async def _run_with_playwright(
                 max_steps=max_steps,
                 session_timeout=session_timeout,
                 retries=retries,
+                language=language,
                 on_progress=on_progress,
             )
         finally:
