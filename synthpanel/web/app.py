@@ -71,12 +71,24 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
     def render(request: Request, template: str, *, status_code: int = 200, **ctx) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(request, template, ctx, status_code=status_code)
 
-    # (a) Welcome
+    # (a) Welcome — when settings exist, test the connection now and show status
     @app.get("/", response_class=HTMLResponse)
-    def welcome(request: Request):
-        return render(request, "welcome.html")
+    async def welcome(request: Request):
+        settings = store.get_settings()
+        status_ok: bool | None = None
+        status_message = ""
+        if settings:
+            status_ok, status_message = await test_connection(
+                settings["provider"], settings["config"]
+            )
+        return render(
+            request,
+            "welcome.html",
+            settings=settings,
+            status_ok=status_ok,
+            status_message=status_message,
+        )
 
-    # branch after "Get Started": skip provider setup if we already have settings
     @app.get("/start")
     def start():
         if store.get_settings():
