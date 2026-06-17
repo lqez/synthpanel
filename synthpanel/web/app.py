@@ -175,6 +175,47 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
     def personas_page(request: Request):
         return render(request, "personas.html", personas=store.list_personas())
 
+    @app.get("/personas/new", response_class=HTMLResponse)
+    def personas_new_page(request: Request):
+        return render(request, "persona_new.html", generated=[], count=3, description="")
+
+    @app.post("/personas/new/generate", response_class=HTMLResponse)
+    async def personas_generate(request: Request):
+        form = await request.form()
+        description = (form.get("description") or "").strip()
+        n = max(1, min(10, int(form.get("count") or 3)))
+        settings = store.get_settings() or {"provider": "fake", "config": {}}
+        personas = await recommend_personas(
+            url="",
+            focus=description or "다양한 배경과 기술 수준을 가진 일반 사용자",
+            n=n,
+            provider_key=settings["provider"],
+            config=settings["config"],
+        )
+        return render(
+            request,
+            "persona_new.html",
+            generated=_persona_choices(personas),
+            count=n,
+            description=description,
+        )
+
+    @app.post("/personas/new")
+    async def personas_new_save(request: Request):
+        form = await request.form()
+        for token in form.getlist("personas"):
+            try:
+                data = _decode_persona(token)
+            except Exception:  # noqa: BLE001
+                continue
+            store.ensure_persona(data, source="custom")
+        return RedirectResponse("/personas", status_code=303)
+
+    @app.post("/personas/reset")
+    def personas_reset():
+        store.reset_library()
+        return RedirectResponse("/personas", status_code=303)
+
     @app.post("/personas/{persona_id}/delete")
     def persona_delete(persona_id: int):
         store.delete_persona(persona_id)

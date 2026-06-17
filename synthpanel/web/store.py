@@ -96,6 +96,9 @@ class Store:
             count = conn.execute("SELECT COUNT(*) AS n FROM personas").fetchone()["n"]
         if count:
             return
+        self._seed_from_examples()
+
+    def _seed_from_examples(self) -> None:
         from synthpanel.persona.loader import load_personas
         from synthpanel.persona.personality import random_personality
 
@@ -111,6 +114,12 @@ class Store:
                 persona.model_dump(exclude_none=True, exclude_defaults=True),
                 source="library",
             )
+
+    def reset_library(self) -> None:
+        """Delete all library-sourced personas and re-seed from bundled examples."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM personas WHERE source = 'library'")
+        self._seed_from_examples()
 
     # --- personas (library) ---
 

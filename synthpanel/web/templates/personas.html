@@ -6,6 +6,14 @@
   <p class="muted">저장된 페르소나입니다. 프로젝트에서 선택해 재사용하며, 추천받은 페르소나도
     프로젝트에 쓰면 여기에 보관됩니다.</p>
 
+  <div style="display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+    <a href="/personas/new" class="btn">✨ 새 페르소나 생성</a>
+    <form method="post" action="/personas/reset"
+          onsubmit="return confirm('라이브러리 페르소나를 초기 500개로 초기화할까요?\n커스텀으로 추가한 페르소나는 유지됩니다.')">
+      <button class="btn secondary" type="submit">↺ 라이브러리 초기화</button>
+    </form>
+  </div>
+
   <div class="card">
     {% if not personas %}<p class="muted">아직 저장된 페르소나가 없습니다.</p>{% endif %}
     {% for p in personas %}
