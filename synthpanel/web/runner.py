@@ -26,7 +26,7 @@ async def execute_run(
     *,
     max_steps: int = 15,
     concurrency: int = 4,
-    session_timeout: float | None = 180.0,
+    session_timeout: float | None = 600.0,
     retries: int = 1,
     language: str = "en",
     artifacts_dir: str | Path | None = None,

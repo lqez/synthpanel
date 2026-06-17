@@ -7,25 +7,64 @@
   {% if run.status == "running" %}
     <div class="card" id="live">
       <h2>실행 중… <span class="muted" id="live-count"></span></h2>
-      <ul id="live-log"></ul>
+      <div id="live-personas"></div>
     </div>
     <script>
       (function () {
         var es = new EventSource("/runs/{{ run.id }}/stream");
-        var log = document.getElementById("live-log");
+        var container = document.getElementById("live-personas");
         var count = document.getElementById("live-count");
+        var cardKeys = {};
+        var keyCount = 0;
+
+        function getKey(name) {
+          if (!cardKeys[name]) cardKeys[name] = "lp" + (++keyCount);
+          return cardKeys[name];
+        }
+
+        function ensureCard(name) {
+          var key = getKey(name);
+          if (!document.getElementById(key)) {
+            var div = document.createElement("div");
+            div.id = key;
+            div.style.cssText = "padding:8px 0;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:flex-start;gap:8px";
+            div.innerHTML =
+              '<div style="flex:1;min-width:0">' +
+                '<strong>' + name + '</strong>' +
+                '<div class="muted" id="' + key + '-step" style="font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">대기 중...</div>' +
+              '</div>' +
+              '<span class="pill" id="' + key + '-status">실행중</span>';
+            container.appendChild(div);
+          }
+        }
+
         es.onmessage = function (ev) {
           var e = JSON.parse(ev.data);
-          var li = document.createElement("li");
-          li.textContent = (e.kind === "finish")
-            ? "✓ " + e.persona + " — " + e.status
-            : "▶ " + e.persona + " 시작";
-          log.appendChild(li);
+          ensureCard(e.persona);
+          var key = getKey(e.persona);
+          var stepEl = document.getElementById(key + "-step");
+          var statusEl = document.getElementById(key + "-status");
+
+          if (e.kind === "step" && stepEl) {
+            var num = (e.step_idx !== null && e.step_idx !== undefined) ? (e.step_idx + 1) : "?";
+            var act = e.action_type || "";
+            var urlPart = e.url ? " — " + e.url.replace(/^https?:\/\//, "").slice(0, 50) : "";
+            stepEl.textContent = "스텝 " + num + ": " + act + urlPart;
+          } else if (e.kind === "finish") {
+            if (statusEl) {
+              statusEl.textContent = e.status || "done";
+              statusEl.style.background = (e.status === "success") ? "#27ae60" : "#c0392b";
+              statusEl.style.color = "#fff";
+            }
+            if (stepEl) stepEl.textContent = "";
+          }
+
           if (e.total) count.textContent = "(" + (e.index + 1) + "/" + e.total + ")";
         };
+
         es.addEventListener("done", function () {
           es.close();
-          location.reload();  // re-render with final results
+          location.reload();
         });
       })();
     </script>
@@ -66,35 +105,92 @@
     </div>
   {% endif %}
 
-  {% for s in run.result.sessions %}
-    <div class="card">
-      <h2>{{ s.persona_name }} <span class="pill">{{ s.status }}</span>
-        <span style="float:right;font-size:.85rem">
-          {% if s.trace_path %}<a href="/runs/{{ run.id }}/sessions/{{ loop.index0 }}/trace">trace.zip</a>{% endif %}
-          {% if s.video_path %} · <a href="/runs/{{ run.id }}/sessions/{{ loop.index0 }}/video">video</a>{% endif %}
-        </span>
-      </h2>
-      {% if s.ux_feedback %}<p class="muted">{{ s.ux_feedback }}</p>{% endif %}
+  {% if run.result.sessions %}
+    {% if same_goal %}
+      {# All personas share the same goal — show compact table, not full cards #}
+      <div class="card">
+        <h2>페르소나별 요약</h2>
+        {% if common_goal %}
+          <p class="muted" style="margin-top:0">공통 목표: {{ common_goal }}</p>
+        {% endif %}
+        <table style="width:100%;border-collapse:collapse;font-size:.9rem">
+          <thead>
+            <tr style="border-bottom:2px solid #eee">
+              <th style="text-align:left;padding:6px 4px">페르소나</th>
+              <th style="text-align:center;padding:6px 4px">상태</th>
+              <th style="text-align:center;padding:6px 4px">스텝</th>
+              <th style="text-align:center;padding:6px 4px">버그</th>
+              <th style="text-align:left;padding:6px 4px">피드백</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in run.result.sessions %}
+              <tr style="border-top:1px solid #eee">
+                <td style="padding:6px 4px">
+                  <strong>{{ s.persona_name }}</strong>
+                  {% if s.trace_path or s.video_path %}
+                    <span style="font-size:.8rem">
+                      {% if s.trace_path %}<a href="/runs/{{ run.id }}/sessions/{{ loop.index0 }}/trace">trace</a>{% endif %}
+                      {% if s.video_path %}<a href="/runs/{{ run.id }}/sessions/{{ loop.index0 }}/video">video</a>{% endif %}
+                    </span>
+                  {% endif %}
+                </td>
+                <td style="text-align:center;padding:6px 4px"><span class="pill">{{ s.status }}</span></td>
+                <td style="text-align:center;padding:6px 4px">{{ s.steps|length }}</td>
+                <td style="text-align:center;padding:6px 4px">{{ s.bugs|length }}</td>
+                <td style="padding:6px 4px;color:#666;font-size:.85rem">
+                  {% if s.ux_feedback %}{{ s.ux_feedback | truncate(80) }}{% endif %}
+                </td>
+              </tr>
+              {% if s.bugs %}
+                <tr style="border-top:none;background:#fafafa">
+                  <td colspan="5" style="padding:2px 4px 8px 4px">
+                    {% for b in s.bugs %}
+                      <span style="margin-right:8px;font-size:.82rem">🐞 <span class="pill">{{ b.severity }}</span> {{ b.title }}</span>
+                    {% endfor %}
+                  </td>
+                </tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {# Different goals — show full per-persona cards #}
+      {% for s in run.result.sessions %}
+        <div class="card">
+          <h2>{{ s.persona_name }} <span class="pill">{{ s.status }}</span>
+            <span style="float:right;font-size:.85rem">
+              {% if s.trace_path %}<a href="/runs/{{ run.id }}/sessions/{{ loop.index0 }}/trace">trace.zip</a>{% endif %}
+              {% if s.video_path %} · <a href="/runs/{{ run.id }}/sessions/{{ loop.index0 }}/video">video</a>{% endif %}
+            </span>
+          </h2>
+          {% if persona_goals.get(s.persona_name) %}
+            <p class="muted" style="margin-top:0;font-size:.85rem">목표: {{ persona_goals.get(s.persona_name) }}</p>
+          {% endif %}
+          {% if s.ux_feedback %}<p class="muted">{{ s.ux_feedback }}</p>{% endif %}
 
-      {% if s.bugs %}
-        <strong>버그 {{ s.bugs|length }}건</strong>
-        {% for b in s.bugs %}
-          <div class="list-item">
-            <span>🐞 {{ b.title }}</span><span class="pill">{{ b.severity }}</span>
-          </div>
-        {% endfor %}
-      {% endif %}
+          {% if s.bugs %}
+            <strong>버그 {{ s.bugs|length }}건</strong>
+            {% for b in s.bugs %}
+              <div class="list-item">
+                <span>🐞 {{ b.title }}</span><span class="pill">{{ b.severity }}</span>
+              </div>
+            {% endfor %}
+          {% endif %}
 
-      <details>
-        <summary class="muted">스텝 {{ s.steps|length }}개</summary>
-        <ol>
-          {% for st in s.steps %}
-            <li><code>{{ st.action_type }}</code>
-              {% if st.action_target %}{{ st.action_target }}{% endif %}
-              — {{ st.result }}</li>
-          {% endfor %}
-        </ol>
-      </details>
-    </div>
-  {% endfor %}
+          <details>
+            <summary class="muted">스텝 {{ s.steps|length }}개</summary>
+            <ol>
+              {% for st in s.steps %}
+                <li><code>{{ st.action_type }}</code>
+                  {% if st.action_target %}{{ st.action_target }}{% endif %}
+                  — {{ st.result }}</li>
+              {% endfor %}
+            </ol>
+          </details>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endif %}
 {% endblock %}

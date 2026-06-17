@@ -7,6 +7,9 @@ production (Anthropic + Playwright). See PLAN.md section 2.
 
 from __future__ import annotations
 
+import asyncio
+from typing import Awaitable, Callable
+
 from synthpanel.agent.actions import TERMINAL_ACTIONS, Action, ActionType
 from synthpanel.agent.llm import LLMProvider, Turn
 from synthpanel.browser.base import BrowserSession
@@ -20,6 +23,8 @@ from synthpanel.report.models import (
     StepTrace,
 )
 
+StepSink = Callable[[int, str, str | None], Awaitable[None] | None]
+
 
 async def run_session(
     persona: Persona,
@@ -30,6 +35,7 @@ async def run_session(
     secrets: set[str] | None = None,
     language: str = "en",
     focus: str = "",
+    on_step: StepSink | None = None,
 ) -> SessionResult:
     """Run one persona to its goal, giving up, or max_steps, and return results.
 
@@ -59,6 +65,11 @@ async def run_session(
             focus=focus,
         )
         action = await llm.decide(turn)
+
+        if on_step is not None:
+            maybe = on_step(step_idx, action.type.value, observation.url)
+            if asyncio.iscoroutine(maybe):
+                await maybe
 
         trace = StepTrace(
             step_idx=step_idx,

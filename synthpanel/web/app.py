@@ -301,6 +301,9 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
                     "index": e.index,
                     "total": e.total,
                     "status": e.status,
+                    "step_idx": e.step_idx,
+                    "action_type": e.action_type,
+                    "url": e.url,
                 },
             )
 
@@ -348,11 +351,32 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
 
     @app.get("/runs/{run_id}", response_class=HTMLResponse)
     def run_detail(request: Request, run_id: int):
+        import re
+
         run = store.get_run(run_id)
         if not run:
             return RedirectResponse("/projects", status_code=303)
         agg = aggregate(_results_from_run(run))
-        return render(request, "run_detail.html", run=run, agg=agg)
+        project = store.get_project(run["project_id"])
+        personas = (project or {}).get("personas", [])
+        persona_goals = {
+            p.get("name", ""): (p.get("intent") or {}).get("goal", "")
+            for p in personas
+        }
+        base_goals = {
+            re.sub(r"\s*\(as a [^)]+\)\s*$", "", g).strip()
+            for g in persona_goals.values()
+            if g
+        }
+        same_goal = len(base_goals) <= 1
+        common_goal = next(iter(base_goals), "")
+        return render(
+            request, "run_detail.html",
+            run=run, agg=agg,
+            persona_goals=persona_goals,
+            same_goal=same_goal,
+            common_goal=common_goal,
+        )
 
     @app.get("/runs/{run_id}/sessions/{idx}/{kind}")
     def run_artifact(run_id: int, idx: int, kind: str):
