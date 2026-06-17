@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from synthpanel.agent.llm import Turn
 from synthpanel.persona.identity import synthetic_identity
+from synthpanel.report.languages import english_name
 
 _SIGNUP_GUIDANCE = """\
 If reaching your goal requires you to sign up or log in, use the synthetic \
@@ -40,9 +41,16 @@ def render_persona(persona) -> str:  # noqa: ANN001 - Persona, avoid import cycl
 def render_user_turn(turn: Turn) -> str:
     history = "\n".join(turn.history[-10:]) if turn.history else "(none yet)"
     identity = synthetic_identity(turn.persona)
+    lang = english_name(turn.language)
+    language_line = (
+        f"OUTPUT LANGUAGE: Write every note, bug-report title/description, and UX "
+        f"feedback in {lang}, regardless of the page's own language. Keep literal UI "
+        f"labels you quote as-is."
+    )
     return (
         f"PERSONA:\n{render_persona(turn.persona)}\n\n"
         f"GOAL: {turn.persona.intent.goal}\n\n"
+        f"{language_line}\n\n"
         f"SIGN-UP / LOGIN:\n{_SIGNUP_GUIDANCE}\n\n"
         f"SYNTHETIC IDENTITY:\n{identity.as_prompt_block()}\n\n"
         f"STEP: {turn.step_idx}\n\n"
