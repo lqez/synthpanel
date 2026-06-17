@@ -29,7 +29,6 @@ from fastapi.templating import Jinja2Templates
 
 from synthpanel.agent.providers import available_providers, test_connection
 from synthpanel.orchestrator import PanelProgress
-from synthpanel.persona.loader import load_personas
 from synthpanel.persona.models import Persona
 from synthpanel.persona.recommender import recommend_personas
 from synthpanel.report.aggregate import aggregate
@@ -41,7 +40,6 @@ from synthpanel.web.runner import execute_run
 from synthpanel.web.store import Store
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-_LIBRARY = Path(__file__).parent.parent / "persona" / "library" / "examples.yaml"
 
 
 def _encode_persona(persona: Persona) -> str:
@@ -130,13 +128,27 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
     def _lang_ctx() -> dict:
         return {"languages": LANGUAGES, "default_language": store.get_language()}
 
+    def _library_choices() -> list[dict]:
+        personas = [Persona.model_validate(p["data"]) for p in store.list_personas()]
+        return _persona_choices(personas)
+
+    # Persona library (persisted)
+    @app.get("/personas", response_class=HTMLResponse)
+    def personas_page(request: Request):
+        return render(request, "personas.html", personas=store.list_personas())
+
+    @app.post("/personas/{persona_id}/delete")
+    def persona_delete(persona_id: int):
+        store.delete_persona(persona_id)
+        return RedirectResponse("/personas", status_code=303)
+
     # (e) project creation
     @app.get("/projects/new", response_class=HTMLResponse)
     def project_new(request: Request):
         return render(
             request,
             "project_new.html",
-            library=_persona_choices(load_personas(_LIBRARY)),
+            library=_library_choices(),
             recommended=[],
             **_lang_ctx(),
         )
@@ -157,7 +169,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         return render(
             request,
             "project_new.html",
-            library=_persona_choices(load_personas(_LIBRARY)),
+            library=_library_choices(),
             recommended=_persona_choices(personas),
             name=form.get("name", ""),
             url=form.get("url", ""),
@@ -176,9 +188,13 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         personas: list[dict] = []
         for token in form.getlist("personas"):
             try:
-                personas.append(_decode_persona(token))
+                data = _decode_persona(token)
             except Exception:  # noqa: BLE001 - ignore tampered/invalid tokens
                 continue
+            # Persist to the library for reuse (recommended personas included),
+            # and snapshot into the project so past runs stay reproducible.
+            store.ensure_persona(data, source="custom")
+            personas.append(data)
         project_id = store.create_project(name, url, focus, personas, language=language)
         return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
