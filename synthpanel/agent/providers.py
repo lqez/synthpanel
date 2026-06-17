@@ -4,8 +4,8 @@ Each provider declares the config fields the web onboarding form should render,
 plus a default model. The agent loop stays provider-agnostic via LLMProvider;
 this module is the single place that knows about concrete providers.
 
-Only Claude (Anthropic), local Ollama, and the offline Fake provider are wired
-up; OpenAI (Codex) is declared as a placeholder for later.
+Claude (Anthropic), OpenAI, local Ollama, and the offline Fake provider are all
+wired up.
 """
 
 from __future__ import annotations
@@ -49,13 +49,18 @@ PROVIDERS: dict[str, ProviderSpec] = {
         default_model="fake",
         fields=[],
     ),
-    # Declared for the UI; not selectable until implemented.
     "openai": ProviderSpec(
         key="openai",
-        label="OpenAI (Codex)",
+        label="OpenAI",
         default_model="gpt-4o",
-        fields=[ProviderField("api_key", "API Key", type="password")],
-        available=False,
+        fields=[
+            ProviderField("api_key", "API Key", type="password", placeholder="sk-..."),
+            ProviderField("model", "Model", required=False, placeholder="gpt-4o"),
+            ProviderField(
+                "base_url", "Base URL (optional)", required=False,
+                placeholder="OpenAI-compatible endpoint",
+            ),
+        ],
     ),
     "ollama": ProviderSpec(
         key="ollama",
@@ -83,6 +88,10 @@ async def test_connection(provider_key: str, config: dict) -> tuple[bool, str]:
         from synthpanel.agent.anthropic_provider import test_anthropic_connection
 
         return await test_anthropic_connection(config)
+    if provider_key == "openai":
+        from synthpanel.agent.openai_provider import test_openai_connection
+
+        return await test_openai_connection(config)
     if provider_key == "ollama":
         from synthpanel.agent.ollama_provider import test_ollama_connection
 
@@ -107,6 +116,13 @@ def build_provider(provider_key: str, config: dict) -> LLMProvider:
 
         model = config.get("model") or PROVIDERS["anthropic"].default_model
         return AnthropicProvider(api_key=config["api_key"], model=model)
+    if provider_key == "openai":
+        from synthpanel.agent.openai_provider import OpenAIProvider
+
+        model = config.get("model") or PROVIDERS["openai"].default_model
+        return OpenAIProvider(
+            api_key=config.get("api_key"), model=model, base_url=config.get("base_url")
+        )
     if provider_key == "ollama":
         from synthpanel.agent.ollama_provider import OllamaProvider
 

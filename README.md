@@ -30,9 +30,10 @@ uv run synthpanel serve              # http://127.0.0.1:8000
 
 Then open **http://127.0.0.1:8000** and follow the flow:
 
-1. **Get Started → choose an LLM provider.**
+1. **Get Started → choose an LLM provider** (all SDKs are installed by default):
    - *Fake (offline demo)* — no API key; personas run a scripted exploration.
    - *Claude (Anthropic)* — enter an API key; the model drives each persona.
+   - *OpenAI* — API key (and optionally an OpenAI-compatible base URL).
    - *Local (Ollama)* — point at a running Ollama server and a tool-capable
      model (e.g. `llama3.1`); runs fully locally, no API key.
 
@@ -44,12 +45,6 @@ Then open **http://127.0.0.1:8000** and follow the flow:
    traces and video.
 
 Bind elsewhere with `uv run synthpanel serve --host 0.0.0.0 --port 8080`.
-
-To use the real Anthropic provider, also install the optional extra:
-
-```bash
-uv sync --extra llm
-```
 
 ## Data
 
