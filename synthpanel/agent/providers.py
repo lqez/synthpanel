@@ -99,6 +99,25 @@ async def test_connection(provider_key: str, config: dict) -> tuple[bool, str]:
     return False, f"provider '{provider_key}' is not available yet"
 
 
+async def list_models(provider_key: str, config: dict) -> tuple[bool, list[str] | str]:
+    """List the models available for a provider given its config (key/host)."""
+    if provider_key == "fake":
+        return True, ["fake"]
+    if provider_key == "anthropic":
+        from synthpanel.agent.anthropic_provider import list_anthropic_models
+
+        return await list_anthropic_models(config)
+    if provider_key == "openai":
+        from synthpanel.agent.openai_provider import list_openai_models
+
+        return await list_openai_models(config)
+    if provider_key == "ollama":
+        from synthpanel.agent.ollama_provider import list_ollama_models
+
+        return await list_ollama_models(config)
+    return False, f"provider '{provider_key}' is not available yet"
+
+
 def build_provider(provider_key: str, config: dict) -> LLMProvider:
     """Construct a runnable LLMProvider from saved config."""
     if provider_key == "fake":

@@ -81,6 +81,24 @@ class OpenAIProvider:
         return Action(type=ActionType.GIVE_UP, rationale="No tool call returned by model.")
 
 
+async def list_openai_models(config: dict) -> tuple[bool, list[str] | str]:
+    api_key = (config or {}).get("api_key")
+    base_url = (config or {}).get("base_url") or None
+    if not api_key and not base_url:
+        return False, "API key is required"
+    try:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        page = await client.models.list()
+        # Prefer chat-capable models; fall back to all if the heuristic empties it.
+        ids = sorted(m.id for m in page.data)
+        chat = [i for i in ids if i.startswith(("gpt", "o1", "o3", "o4", "chatgpt"))]
+        return True, chat or ids
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+
+
 async def test_openai_connection(config: dict) -> tuple[bool, str]:
     api_key = (config or {}).get("api_key")
     base_url = (config or {}).get("base_url") or None

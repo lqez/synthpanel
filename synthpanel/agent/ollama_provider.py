@@ -75,6 +75,18 @@ class OllamaProvider:
         return Action(type=ActionType.GIVE_UP, rationale="No tool call returned by model.")
 
 
+async def list_ollama_models(config: dict) -> tuple[bool, list[str] | str]:
+    host = (config or {}).get("base_url") or _DEFAULT_HOST
+    try:
+        from ollama import AsyncClient
+
+        listing = await AsyncClient(host=host).list()
+        names = [m.get("model") or m.get("name") for m in (listing.get("models") or [])]
+        return True, [n for n in names if n]
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+
+
 async def test_ollama_connection(config: dict) -> tuple[bool, str]:
     host = (config or {}).get("base_url") or _DEFAULT_HOST
     model = (config or {}).get("model")

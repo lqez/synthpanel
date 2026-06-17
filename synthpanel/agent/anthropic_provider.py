@@ -80,6 +80,20 @@ class AnthropicProvider:
         return Action(type=ActionType.GIVE_UP, rationale="No action returned by model.")
 
 
+async def list_anthropic_models(config: dict) -> tuple[bool, list[str] | str]:
+    api_key = (config or {}).get("api_key")
+    if not api_key:
+        return False, "API key is required"
+    try:
+        from anthropic import AsyncAnthropic
+
+        client = AsyncAnthropic(api_key=api_key)
+        page = await client.models.list(limit=100)
+        return True, [m.id for m in page.data]
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+
+
 async def test_anthropic_connection(config: dict) -> tuple[bool, str]:
     api_key = (config or {}).get("api_key")
     if not api_key:
