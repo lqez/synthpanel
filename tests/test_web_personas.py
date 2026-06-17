@@ -33,21 +33,21 @@ def test_delete_persona(ctx):
     assert store.get_persona(pid) is None
 
 
-def test_recommended_persona_persisted_on_project_create(ctx):
+def test_recommended_persona_persisted_on_save(ctx):
     client, store = ctx
     before = len(store.list_personas())
 
-    rec = client.post(
-        "/projects/recommend",
-        data={"name": "App", "url": "https://app.test", "focus": "signup", "count": "2"},
-    )
-    tokens = re.findall(r'name="personas" value="([^"]+)"', rec.text)
-    # Recommended tokens come first; pick those that aren't already library names.
-    client.post(
+    # Step 1: create the project, then recommend + save personas in step 2.
+    r = client.post(
         "/projects/new",
-        data={"name": "App", "url": "https://app.test", "focus": "signup", "personas": tokens[:2]},
-        follow_redirects=True,
+        data={"name": "App", "url": "https://app.test", "focus": "signup", "language": "en"},
+        follow_redirects=False,
     )
+    pid = r.headers["location"].split("/")[2]
+    rec = client.post(f"/projects/{pid}/personas/recommend", data={"count": "2"})
+    tokens = re.findall(r'name="personas" value="([^"]+)"', rec.text)
+    client.post(f"/projects/{pid}/personas", data={"personas": tokens[:2]}, follow_redirects=True)
+
     # New (recommended) personas were saved into the library.
     assert len(store.list_personas()) >= before
     assert any(p["source"] == "custom" for p in store.list_personas())

@@ -1,73 +1,27 @@
 {% extends "base.html" %}
 {% block title %}새 프로젝트 · SynthPanel{% endblock %}
 {% block body %}
-  <h1>새 프로젝트</h1>
-  <p class="muted">테스트할 URL과 중점, 대상 페르소나를 정합니다.</p>
-
-  {# AI 자동 추천: 같은 폼 값을 넘겨 추천 패널을 받아옵니다 #}
-  <form method="post" action="/projects/recommend" class="card">
-    <h2>AI 페르소나 자동 추천</h2>
-    <p class="muted">URL과 focus를 분석해 엣지케이스를 포함한 균형 잡힌 패널을 제안합니다.</p>
-    <label>대상 URL</label>
-    <input type="url" name="url" value="{{ url or '' }}" placeholder="https://my-vibe-app.dev">
-    <label>focus</label>
-    <input type="text" name="focus" value="{{ focus or '' }}" placeholder="예: 회원가입부터 결제까지">
-    <label>추천 인원</label>
-    <input type="text" name="count" value="5">
-    <input type="hidden" name="name" value="{{ name or '' }}">
-    <p style="margin-top:14px"><button class="btn secondary" type="submit">✨ 추천 받기</button></p>
-  </form>
+  <h1>새 프로젝트 <span class="muted" style="font-size:1rem">1 / 2 · 기본 정보</span></h1>
 
   <form method="post" action="/projects/new" class="card">
     <label>프로젝트 이름</label>
-    <input type="text" name="name" value="{{ name or '' }}" placeholder="My Vibe App" required>
+    <input type="text" name="name" placeholder="My Vibe App" required>
 
     <label>대상 URL</label>
-    <input type="url" name="url" value="{{ url or '' }}" placeholder="https://my-vibe-app.dev" required>
+    <input type="url" name="url" placeholder="https://my-vibe-app.dev" required>
 
     <label>테스트 목적 / 중점 (focus)</label>
     <p class="muted">무엇을 봐달라는지 적어주세요. 실행 시 각 페르소나에게 그대로 전달됩니다.</p>
     <textarea name="focus" rows="3"
-      placeholder="예: 회원가입부터 결제까지의 흐름에서 막히는 지점, 모바일에서의 버튼 접근성">{{ focus or '' }}</textarea>
+      placeholder="예: 디자인 평가 / 접근성 / 내용이 목적에 충분한지"></textarea>
 
     <label>리포트 언어</label>
-    <p class="muted">버그·UX 피드백을 이 언어로 작성합니다. (기본: 전역 설정)</p>
     <select name="language">
-      {% set chosen = selected_language or default_language %}
       {% for code, names in languages.items() %}
-        <option value="{{ code }}" {% if code == chosen %}selected{% endif %}>{{ names[1] }}</option>
+        <option value="{{ code }}" {% if code == default_language %}selected{% endif %}>{{ names[1] }}</option>
       {% endfor %}
     </select>
 
-    {% if recommended %}
-      <label>추천된 페르소나</label>
-      <p class="muted">AI가 제안한 패널입니다. 빼고 싶은 항목은 체크 해제하세요.</p>
-      {% for p in recommended %}
-        <label class="check">
-          <input type="checkbox" name="personas" value="{{ p.token }}" checked>
-          <span><strong>{{ p.name }}</strong>
-            {% if p.archetype %}<span class="muted">— {{ p.archetype }}</span>{% endif %}
-            <br><span class="muted">목표: {{ p.goal }}</span></span>
-        </label>
-      {% endfor %}
-    {% endif %}
-
-    <label>라이브러리 페르소나</label>
-    {% for p in library %}
-      <label class="check">
-        <input type="checkbox" name="personas" value="{{ p.token }}"
-               {% if not recommended %}checked{% endif %}>
-        <span><strong>{{ p.name }}</strong>
-          {% if p.archetype %}<span class="muted">— {{ p.archetype }}</span>{% endif %}
-          <br><span class="muted">목표: {{ p.goal }}</span></span>
-      </label>
-    {% endfor %}
-
-    <p class="muted" style="margin-top:10px">
-      ℹ️ 가입/로그인이 필요한 경우, 페르소나는 본인인증이 없는 한 자기 신원에 맞는
-      합성 계정(example.com 이메일·랜덤 비밀번호)으로 직접 가입해 진행합니다.
-      이메일·문자·신분 인증이 필요하면 블로커로 리포트합니다.
-    </p>
-    <p style="margin-top:18px"><button class="btn" type="submit">프로젝트 생성 →</button></p>
+    <p style="margin-top:18px"><button class="btn" type="submit">다음: 페르소나 준비 →</button></p>
   </form>
 {% endblock %}

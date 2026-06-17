@@ -54,16 +54,21 @@ def test_onboarding_connection_failure_rerenders(client, monkeypatch):
 def test_create_project_then_run(client, monkeypatch):
     client.post("/onboarding", data={"provider": "fake"})
 
-    # Create a project selecting a library persona.
+    # Step 1: project basics -> redirect to persona preparation.
     r = client.post(
         "/projects/new",
-        data={"name": "App", "url": "https://app.test", "focus": "signup", "personas": "김순자"},
+        data={"name": "App", "url": "https://app.test", "focus": "signup", "language": "en"},
         follow_redirects=False,
     )
     loc = r.headers["location"]
-    assert loc.startswith("/projects/")
+    assert loc.endswith("/personas")
+    pid = loc.split("/")[2]
 
-    detail = client.get(loc)
+    # Step 2: save personas (none) -> project detail.
+    r2 = client.post(f"/projects/{pid}/personas", data={"personas": []}, follow_redirects=False)
+    assert r2.headers["location"] == f"/projects/{pid}"
+
+    detail = client.get(f"/projects/{pid}")
     assert detail.status_code == 200
     assert "app.test" in detail.text
 
@@ -72,7 +77,7 @@ def test_create_project_then_run(client, monkeypatch):
         return {"sessions": [], "summary": {"personas": 1, "bugs": 3, "succeeded": 0}}
 
     monkeypatch.setattr("synthpanel.web.app.execute_run", fake_execute)
-    run_resp = client.post(f"{loc}/run", follow_redirects=False)
+    run_resp = client.post(f"/projects/{pid}/run", follow_redirects=False)
     run_loc = run_resp.headers["location"]
     assert run_loc.startswith("/runs/")
 
