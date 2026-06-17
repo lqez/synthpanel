@@ -10,11 +10,6 @@
     <label>대상 URL</label>
     <input type="url" name="url" placeholder="https://my-vibe-app.dev" required>
 
-    <label>테스트 목적 / 중점 (focus)</label>
-    <p class="muted">무엇을 봐달라는지 적어주세요. 실행 시 각 페르소나에게 그대로 전달됩니다.</p>
-    <textarea name="focus" rows="3"
-      placeholder="예: 디자인 평가 / 접근성 / 내용이 목적에 충분한지"></textarea>
-
     <label>리포트 언어</label>
     <select name="language">
       {% for code, names in languages.items() %}

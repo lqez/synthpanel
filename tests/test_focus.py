@@ -54,7 +54,8 @@ async def test_runner_passes_project_focus(monkeypatch):
 
     monkeypatch.setattr(runner, "_run_with_playwright", fake_run)
     await runner.execute_run(
-        {"url": "u", "personas": [{"name": "A", "intent": {"goal": "g"}}], "focus": "signup errors"},
+        {"url": "u", "personas": [{"name": "A", "intent": {"goal": "g"}}]},
         {"provider": "fake", "config": {}},
+        focus="signup errors",
     )
     assert captured["focus"] == "signup errors"

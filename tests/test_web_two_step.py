@@ -53,7 +53,7 @@ def test_persona_prep_lists_library_and_saves(ctx):
     prep = client.get(f"/projects/{pid}/personas")
     assert prep.status_code == 200
     assert "김순자" in prep.text
-    tokens = re.findall(r'name="personas" value="([^"]+)"', prep.text)
+    tokens = re.findall(r'data-token="([^"]+)"', prep.text)
 
     client.post(f"/projects/{pid}/personas", data={"personas": tokens[:1]})
     assert len(store.get_project(pid)["personas"]) == 1
@@ -69,7 +69,7 @@ def test_personas_are_editable(ctx):
         ).headers["location"].split("/")[2]
     )
     tokens = re.findall(
-        r'name="personas" value="([^"]+)"', client.get(f"/projects/{pid}/personas").text
+        r'data-token="([^"]+)"', client.get(f"/projects/{pid}/personas").text
     )
     client.post(f"/projects/{pid}/personas", data={"personas": tokens[:2]})
     assert len(store.get_project(pid)["personas"]) == 2

@@ -2,12 +2,12 @@
 {% block title %}페르소나 준비 · {{ project.name }}{% endblock %}
 {% block body %}
   <h1>페르소나 준비 <span class="muted" style="font-size:1rem">2 / 2 · {{ project.name }}</span></h1>
-  <p class="muted">{{ project.url }}{% if project.focus %} · {{ project.focus }}{% endif %}</p>
+  <p class="muted">{{ project.url }}</p>
 
-  {# AI 자동 추천: 프로젝트의 URL/focus를 분석해 패널 제안 #}
+  {# AI 자동 추천 #}
   <form method="post" action="/projects/{{ project.id }}/personas/recommend" class="card">
     <h2>AI 페르소나 자동 추천</h2>
-    <p class="muted">이 프로젝트의 URL·focus를 분석해 엣지케이스를 포함한 패널을 제안합니다.</p>
+    <p class="muted">이 프로젝트의 URL을 분석해 엣지케이스를 포함한 패널을 제안합니다.</p>
     <label>추천 인원</label>
     <input type="text" name="count" value="5">
     <p style="margin-top:14px"><button class="btn secondary" type="submit">✨ 추천 받기</button></p>
@@ -27,17 +27,170 @@
       {% endfor %}
     {% endif %}
 
-    <label>라이브러리 페르소나</label>
-    {% for p in library %}
-      <label class="check">
-        <input type="checkbox" name="personas" value="{{ p.token }}"
-               {% if p.name in chosen or (not recommended and not chosen) %}checked{% endif %}>
-        <span><strong>{{ p.name }}</strong>
-          {% if p.archetype %}<span class="muted">— {{ p.archetype }}</span>{% endif %}
-          <br><span class="muted">목표: {{ p.goal }}</span></span>
-      </label>
-    {% endfor %}
+    <div style="display:flex;align-items:baseline;gap:10px;margin:14px 0 6px">
+      <label style="margin:0;font-weight:600">라이브러리 페르소나</label>
+      <span id="lib-sel-count" class="muted" style="font-size:.85rem"></span>
+    </div>
+
+    {# Selected library personas shown at top #}
+    <div id="lib-selected" style="padding-bottom:4px;border-bottom:1px solid #ececf3;margin-bottom:10px;min-height:2px"></div>
+
+    {# Filter bar #}
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="text" id="lib-search" placeholder="이름·아키타입·지역·목표 검색"
+             style="flex:2;min-width:180px" autocomplete="off">
+      <select id="lib-archetype" style="flex:1;min-width:160px;width:auto">
+        <option value="">전체 아키타입</option>
+        {% for a in archetypes %}
+          <option value="{{ a|lower }}">{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Paginated unselected #}
+    <div id="lib-unselected"></div>
+
+    {# Pagination controls #}
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:.9rem">
+      <button type="button" id="lib-prev" class="btn secondary" style="padding:5px 14px;font-size:.9rem">←</button>
+      <span id="lib-page-info" class="muted"></span>
+      <button type="button" id="lib-next" class="btn secondary" style="padding:5px 14px;font-size:.9rem">→</button>
+    </div>
+
+    {# Data store: all library personas as inert data nodes #}
+    <div id="lib-data" style="display:none">
+      {% for p in library %}
+        <div class="lib-item"
+             data-token="{{ p.token }}"
+             data-name="{{ p.name }}"
+             data-archetype="{{ p.archetype }}"
+             data-region="{{ p.region }}"
+             data-goal="{{ p.goal }}"
+             data-checked="{{ 'true' if p.name in chosen else 'false' }}"></div>
+      {% endfor %}
+    </div>
 
     <p style="margin-top:18px"><button class="btn" type="submit">저장하고 프로젝트로 →</button></p>
   </form>
+
+  <script>
+  (function () {
+    var PAGE_SIZE = 25;
+    var page = 0;
+    var origOrder = [];    // all library items in original order
+    var selected = {};     // token -> item (currently selected)
+    var filteredItems = []; // unselected items matching current filter
+
+    var selDiv = document.getElementById('lib-selected');
+    var unselDiv = document.getElementById('lib-unselected');
+    var searchEl = document.getElementById('lib-search');
+    var archetypeEl = document.getElementById('lib-archetype');
+    var pageInfoEl = document.getElementById('lib-page-info');
+    var prevBtn = document.getElementById('lib-prev');
+    var nextBtn = document.getElementById('lib-next');
+    var selCountEl = document.getElementById('lib-sel-count');
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function init() {
+      document.querySelectorAll('#lib-data .lib-item').forEach(function (node) {
+        var item = {
+          token: node.dataset.token,
+          name: node.dataset.name,
+          archetype: node.dataset.archetype || '',
+          region: node.dataset.region || '',
+          goal: node.dataset.goal || '',
+        };
+        origOrder.push(item);
+        if (node.dataset.checked === 'true') {
+          selected[item.token] = item;
+        }
+      });
+      renderSelected();
+      applyFilter();
+    }
+
+    function makeLabel(item, isSelected) {
+      var label = document.createElement('label');
+      label.className = 'check';
+      var inp = document.createElement('input');
+      inp.type = 'checkbox';
+      inp.name = 'personas';
+      inp.value = item.token;
+      inp.checked = isSelected;
+      inp.addEventListener('change', function () {
+        if (this.checked) {
+          selected[item.token] = item;
+        } else {
+          delete selected[item.token];
+        }
+        renderSelected();
+        applyFilter();
+      });
+      var span = document.createElement('span');
+      span.innerHTML =
+        '<strong>' + esc(item.name) + '</strong>' +
+        (item.archetype ? ' <span class="muted">— ' + esc(item.archetype) + '</span>' : '') +
+        (item.region ? ' <span class="muted" style="font-size:.8rem">· ' + esc(item.region) + '</span>' : '') +
+        '<br><span class="muted">목표: ' + esc(item.goal) + '</span>';
+      label.appendChild(inp);
+      label.appendChild(span);
+      return label;
+    }
+
+    function renderSelected() {
+      selDiv.innerHTML = '';
+      var tokens = Object.keys(selected);
+      selCountEl.textContent = tokens.length ? '(' + tokens.length + '명 선택됨)' : '';
+      tokens.forEach(function (token) {
+        selDiv.appendChild(makeLabel(selected[token], true));
+      });
+    }
+
+    function applyFilter() {
+      var search = searchEl.value.toLowerCase().trim();
+      var archetype = archetypeEl.value.toLowerCase();
+      var unselected = origOrder.filter(function (item) { return !selected[item.token]; });
+      filteredItems = unselected.filter(function (item) {
+        var nameMatch = !search ||
+          item.name.toLowerCase().includes(search) ||
+          item.archetype.toLowerCase().includes(search) ||
+          item.region.toLowerCase().includes(search) ||
+          item.goal.toLowerCase().includes(search);
+        var archetypeMatch = !archetype || item.archetype.toLowerCase() === archetype;
+        return nameMatch && archetypeMatch;
+      });
+      page = 0;
+      renderPage();
+    }
+
+    function renderPage() {
+      unselDiv.innerHTML = '';
+      var start = page * PAGE_SIZE;
+      filteredItems.slice(start, start + PAGE_SIZE).forEach(function (item) {
+        unselDiv.appendChild(makeLabel(item, false));
+      });
+      var total = filteredItems.length;
+      var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      pageInfoEl.textContent = (page + 1) + ' / ' + totalPages + ' (' + total + '명)';
+      prevBtn.disabled = page === 0;
+      nextBtn.disabled = page >= totalPages - 1;
+    }
+
+    searchEl.addEventListener('input', applyFilter);
+    archetypeEl.addEventListener('change', applyFilter);
+    prevBtn.addEventListener('click', function () {
+      if (page > 0) { page--; renderPage(); }
+    });
+    nextBtn.addEventListener('click', function () {
+      if (page < Math.ceil(filteredItems.length / PAGE_SIZE) - 1) { page++; renderPage(); }
+    });
+
+    init();
+  })();
+  </script>
 {% endblock %}

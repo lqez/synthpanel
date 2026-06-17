@@ -5,13 +5,15 @@
   <h1>{{ project.name }}</h1>
   <div class="card">
     <p><strong>URL:</strong> <code>{{ project.url }}</code></p>
-    {% if project.focus %}<p><strong>Focus:</strong> {{ project.focus }}</p>{% endif %}
     <p><strong>페르소나:</strong>
       {% for p in project.personas %}<span class="pill">{{ p.name }}</span> {% endfor %}
       {% if not project.personas %}<span class="muted">없음 (기본 1명으로 실행)</span>{% endif %}
       · <a href="/projects/{{ project.id }}/personas">편집</a>
     </p>
     <form method="post" action="/projects/{{ project.id }}/run">
+      <label>테스트 중점 (focus) <span class="muted" style="font-weight:400">— 선택사항</span></label>
+      <textarea name="focus" rows="2" style="font-size:.9rem;margin-bottom:10px"
+        placeholder="예: 체크아웃까지 완료하기 / 접근성 검토 / 회원가입 흐름">{{ project.focus }}</textarea>
       {% if can_use_vision %}
         <label style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;font-size:.9rem">
           <input type="checkbox" name="vision" style="width:15px;height:15px">

@@ -55,7 +55,13 @@ def _decode_persona(token: str) -> dict:
 def _persona_choices(personas: list[Persona]) -> list[dict]:
     """Shape personas for the selection template: token + display fields."""
     return [
-        {"token": _encode_persona(p), "name": p.name, "archetype": p.archetype, "goal": p.intent.goal}
+        {
+            "token": _encode_persona(p),
+            "name": p.name,
+            "archetype": p.archetype or "",
+            "goal": p.intent.goal,
+            "region": (p.demographics.region if p.demographics else None) or "",
+        }
         for p in personas
     ]
 
@@ -208,7 +214,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         project_id = store.create_project(
             name=(form.get("name") or "Untitled").strip(),
             url=(form.get("url") or "").strip(),
-            focus=(form.get("focus") or "").strip(),
+            focus="",
             personas=[],
             language=normalize(form.get("language")),
         )
@@ -217,13 +223,17 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
     # (e) step 2 — persona preparation for a project (library + AI recommend)
     def _persona_setup(request, project, recommended=None):
         chosen = {p.get("name") for p in project["personas"]}
+        rec_names = {p["name"] for p in (recommended or [])}
+        library = [p for p in _library_choices() if p["name"] not in rec_names]
+        archetypes = sorted({p["archetype"] for p in library if p["archetype"]})
         return render(
             request,
             "project_personas.html",
             project=project,
-            library=_library_choices(),
+            library=library,
             recommended=recommended or [],
             chosen=chosen,
+            archetypes=archetypes,
         )
 
     @app.get("/projects/{project_id}/personas", response_class=HTMLResponse)
@@ -295,7 +305,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             can_use_vision=supports_vision(provider_key, model),
         )
 
-    async def _execute_and_store(run_id: int, project: dict, settings: dict, *, vision: bool = False) -> None:
+    async def _execute_and_store(run_id: int, project: dict, settings: dict, *, vision: bool = False, focus: str = "") -> None:
         def on_progress(e: PanelProgress) -> None:
             broker.publish(
                 run_id,
@@ -317,6 +327,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
                 settings,
                 language=store.project_language(project),
                 vision=vision,
+                focus=focus or project.get("focus", ""),
                 artifacts_dir=store.artifacts_dir(run_id),
                 on_progress=on_progress,
             )
@@ -328,7 +339,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         broker.finish(run_id)
 
     @app.post("/projects/{project_id}/run")
-    async def project_run(project_id: int, vision: str = Form(default="")):
+    async def project_run(project_id: int, vision: str = Form(default=""), focus: str = Form(default="")):
         project = store.get_project(project_id)
         settings = store.get_settings()
         if not project or not settings:
@@ -337,11 +348,11 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         run_id = store.create_run(project_id)
         if background:
             # Run concurrently so the UI can stream progress while it executes.
-            task = asyncio.create_task(_execute_and_store(run_id, project, settings, vision=use_vision))
+            task = asyncio.create_task(_execute_and_store(run_id, project, settings, vision=use_vision, focus=focus))
             app.state.tasks.add(task)
             task.add_done_callback(app.state.tasks.discard)
         else:
-            await _execute_and_store(run_id, project, settings, vision=use_vision)
+            await _execute_and_store(run_id, project, settings, vision=use_vision, focus=focus)
         return RedirectResponse(f"/runs/{run_id}", status_code=303)
 
     @app.get("/runs/{run_id}/stream")
