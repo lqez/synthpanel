@@ -27,7 +27,7 @@ from fastapi.responses import (
 )
 from fastapi.templating import Jinja2Templates
 
-from synthpanel.agent.providers import available_providers, test_connection
+from synthpanel.agent.providers import available_providers, list_models, test_connection
 from synthpanel.orchestrator import PanelProgress
 from synthpanel.persona.models import Persona
 from synthpanel.persona.recommender import recommend_personas
@@ -83,27 +83,46 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             return RedirectResponse("/projects", status_code=303)
         return RedirectResponse("/onboarding", status_code=303)
 
+    def _form_config(form) -> dict:
+        return {
+            k: v
+            for k, v in form.items()
+            if k != "provider" and isinstance(v, str) and v.strip()
+        }
+
     # (b, c) provider selection + config + connection test
     @app.get("/onboarding", response_class=HTMLResponse)
     def onboarding(request: Request, error: str | None = None):
-        current = store.get_settings()
         return render(
             request,
             "onboarding.html",
             providers=available_providers(),
-            current=current,
+            current=store.get_settings(),
+            models={},
             error=error,
+        )
+
+    # Fetch the provider's available models so the user picks from a dropdown.
+    @app.post("/onboarding/models", response_class=HTMLResponse)
+    async def onboarding_models(request: Request):
+        form = await request.form()
+        provider = form.get("provider", "")
+        config = _form_config(form)
+        ok, result = await list_models(provider, config)
+        return render(
+            request,
+            "onboarding.html",
+            providers=available_providers(),
+            current={"provider": provider, "config": config},
+            models={provider: result} if ok else {},
+            error=None if ok else f"모델 목록을 못 불러왔어요: {result}",
         )
 
     @app.post("/onboarding")
     async def onboarding_submit(request: Request):
         form = await request.form()
         provider = form.get("provider", "")
-        config = {
-            k: v
-            for k, v in form.items()
-            if k != "provider" and isinstance(v, str) and v.strip()
-        }
+        config = _form_config(form)
         ok, message = await test_connection(provider, config)
         if not ok:
             return render(
@@ -111,6 +130,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
                 "onboarding.html",
                 providers=available_providers(),
                 current={"provider": provider, "config": config},
+                models={},
                 error=message,
                 status_code=400,
             )
