@@ -17,7 +17,7 @@ import base64
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -27,7 +27,7 @@ from fastapi.responses import (
 )
 from fastapi.templating import Jinja2Templates
 
-from synthpanel.agent.providers import available_providers, list_models, test_connection
+from synthpanel.agent.providers import available_providers, list_models, supports_vision, test_connection
 from synthpanel.orchestrator import PanelProgress
 from synthpanel.persona.models import Persona
 from synthpanel.persona.recommender import recommend_personas
@@ -284,14 +284,18 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         project = store.get_project(project_id)
         if not project:
             return RedirectResponse("/projects", status_code=303)
+        settings = store.get_settings() or {}
+        provider_key = settings.get("provider", "")
+        model = (settings.get("config") or {}).get("model")
         return render(
             request,
             "project_detail.html",
             project=project,
             runs=store.list_runs(project_id),
+            can_use_vision=supports_vision(provider_key, model),
         )
 
-    async def _execute_and_store(run_id: int, project: dict, settings: dict) -> None:
+    async def _execute_and_store(run_id: int, project: dict, settings: dict, *, vision: bool = False) -> None:
         def on_progress(e: PanelProgress) -> None:
             broker.publish(
                 run_id,
@@ -312,6 +316,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
                 project,
                 settings,
                 language=store.project_language(project),
+                vision=vision,
                 artifacts_dir=store.artifacts_dir(run_id),
                 on_progress=on_progress,
             )
@@ -323,19 +328,20 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         broker.finish(run_id)
 
     @app.post("/projects/{project_id}/run")
-    async def project_run(project_id: int):
+    async def project_run(project_id: int, vision: str = Form(default="")):
         project = store.get_project(project_id)
         settings = store.get_settings()
         if not project or not settings:
             return RedirectResponse("/projects", status_code=303)
+        use_vision = vision == "on"
         run_id = store.create_run(project_id)
         if background:
             # Run concurrently so the UI can stream progress while it executes.
-            task = asyncio.create_task(_execute_and_store(run_id, project, settings))
+            task = asyncio.create_task(_execute_and_store(run_id, project, settings, vision=use_vision))
             app.state.tasks.add(task)
             task.add_done_callback(app.state.tasks.discard)
         else:
-            await _execute_and_store(run_id, project, settings)
+            await _execute_and_store(run_id, project, settings, vision=use_vision)
         return RedirectResponse(f"/runs/{run_id}", status_code=303)
 
     @app.get("/runs/{run_id}/stream")

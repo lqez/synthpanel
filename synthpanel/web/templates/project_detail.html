@@ -12,6 +12,13 @@
       · <a href="/projects/{{ project.id }}/personas">편집</a>
     </p>
     <form method="post" action="/projects/{{ project.id }}/run">
+      {% if can_use_vision %}
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;font-size:.9rem">
+          <input type="checkbox" name="vision" style="width:15px;height:15px">
+          📷 Vision 모드 — 매 스텝마다 스크린샷을 찍어 LLM에 전달
+          <span class="muted">(느리지만 시각적 판단 가능)</span>
+        </label><br>
+      {% endif %}
       <button class="btn" type="submit">▶ 테스트 실행</button>
     </form>
   </div>
