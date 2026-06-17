@@ -8,25 +8,22 @@ async def test_connection_routes_per_provider():
     ok, _ = await check_connection("fake", {})
     assert ok is True
 
-    ok, _ = await check_connection("anthropic", {})  # no key -> False, no raise
-    assert ok is False
+    # Each real provider routes to its own test (no creds/server -> False, no raise).
+    for key in ("anthropic", "openai", "ollama"):
+        ok, _ = await check_connection(key, {})
+        assert ok is False
 
-    # Ollama routes to its connection test (no server -> False, no raise).
-    ok, _ = await check_connection("ollama", {})
-    assert ok is False
-
-    ok, msg = await check_connection("openai", {})
+    ok, msg = await check_connection("bogus", {})
     assert ok is False
     assert "not available" in msg
 
 
-def test_ollama_is_selectable():
+def test_real_providers_are_selectable():
     keys = {p.key for p in available_providers()}
-    assert "ollama" in keys
-    assert "openai" not in keys  # still a placeholder
+    assert {"anthropic", "openai", "ollama", "fake"} <= keys
 
 
 def test_build_provider_fake_and_unknown():
     assert build_provider("fake", {}) is not None
     with pytest.raises(ValueError):
-        build_provider("openai", {})
+        build_provider("bogus", {})
