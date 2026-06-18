@@ -4,6 +4,7 @@ from synthpanel.persona.recommender import (
     AppContext,
     _heuristic_tags,
     heuristic_panel,
+    prioritize_tags,
     recommend_from_library,
     recommend_personas,
     select_personas_by_tags,
@@ -100,15 +101,42 @@ def test_heuristic_tags_falls_back_to_default_priority():
 
 async def test_recommend_from_library_selects_with_fake_provider():
     library = [_senior(), _power_user(), Persona(name="z", intent=Intent(goal="g"))]
-    out = await recommend_from_library(
+    rec = await recommend_from_library(
         focus="고령 사용자 접근성", n=2, library=library, provider_key="fake", config={}
     )
-    assert len(out) == 2
-    assert out[0].name == "senior"  # heuristic prioritizes senior/accessibility tags
+    assert len(rec.personas) == 2
+    assert rec.personas[0].name == "senior"  # heuristic prioritizes senior/accessibility
+    assert rec.tags  # chosen tags surfaced
+    assert rec.reasoning  # and a reason for them
+
+
+async def test_recommend_from_library_excludes_already_selected():
+    library = [_senior(), _power_user(), Persona(name="z", intent=Intent(goal="g"))]
+    rec = await recommend_from_library(
+        focus="고령 사용자 접근성",
+        n=3,
+        library=library,
+        provider_key="fake",
+        config={},
+        exclude_names={"senior"},
+    )
+    names = {p.name for p in rec.personas}
+    assert "senior" not in names  # the already-selected persona is filled around
 
 
 async def test_recommend_from_library_empty_library_synthesizes_panel():
-    out = await recommend_from_library(
+    rec = await recommend_from_library(
         focus="checkout", n=3, library=[], provider_key="fake", config={}
     )
-    assert len(out) == 3
+    assert len(rec.personas) == 3
+
+
+async def test_prioritize_tags_skips_llm_when_focus_empty(monkeypatch):
+    async def boom(*args, **kwargs):
+        raise AssertionError("LLM must not be called when there is no focus")
+
+    monkeypatch.setattr(
+        "synthpanel.persona.llm_recommender.prioritize_with_anthropic", boom
+    )
+    tags, reasoning = await prioritize_tags("", "anthropic", {"api_key": "x"})
+    assert tags and reasoning

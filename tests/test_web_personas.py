@@ -54,3 +54,18 @@ def test_recommended_personas_selected_from_library_and_saved(ctx):
     saved = store.get_project(int(pid))["personas"]
     assert len(saved) == 2
     assert len(store.list_personas()) == before
+
+
+def test_recommend_persists_focus_to_project(ctx):
+    client, store = ctx
+    r = client.post(
+        "/projects/new",
+        data={"name": "App", "url": "https://app.test", "language": "en"},
+        follow_redirects=False,
+    )
+    pid = r.headers["location"].split("/")[2]
+    assert store.get_project(int(pid))["focus"] == ""  # focus starts empty
+
+    client.post(f"/projects/{pid}/personas/recommend", data={"count": "2", "focus": "접근성 검토"})
+    # The focus entered when recommending is reflected back into the project.
+    assert store.get_project(int(pid))["focus"] == "접근성 검토"

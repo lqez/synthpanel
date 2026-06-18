@@ -5,11 +5,12 @@
   <p class="muted">{{ project.url }}</p>
 
   {# AI 자동 추천 — separate form, re-renders page with recommended list #}
-  <form method="post" action="/projects/{{ project.id }}/personas/recommend" class="card"
-        onsubmit="return startBusy(this)">
+  <form id="rec-form" method="post" action="/projects/{{ project.id }}/personas/recommend"
+        class="card" onsubmit="return onRecommendSubmit(this)">
     <h2>AI 페르소나 자동 추천</h2>
     <p class="muted">테스트 목적(focus)에 맞는 태그 우선순위를 LLM이 정하고,
-      라이브러리에서 적합한 페르소나를 골라줍니다.</p>
+      라이브러리에서 적합한 페르소나를 골라줍니다.
+      이미 선택된 페르소나는 빼고 새로 채워줍니다.</p>
     <label>테스트 중점 (focus) <span class="muted" style="font-weight:400">— 선택사항</span></label>
     <textarea name="focus" rows="2" style="font-size:.9rem"
       placeholder="예: 회원가입 흐름 / 접근성 검토 / 결제까지 완료">{{ project.focus or '' }}</textarea>
@@ -18,10 +19,27 @@
     <p style="margin-top:14px">
       <button class="btn secondary" type="submit" data-busy-label="추천 받는 중…">✨ 추천 받기</button>
       <span class="muted busy-note" style="display:none;margin-left:10px;font-size:.88rem">
-        LLM이 패널을 구성하고 있어요. 최대 1분 정도 걸릴 수 있습니다.
+        태그 우선순위를 분석하고 있어요. 잠시만 기다려 주세요.
       </span>
     </p>
   </form>
+
+  {# AI가 고른 태그 + 이유 (recommend 직후에만 표시) #}
+  {% if rec_tags or rec_reasoning %}
+  <div class="card" style="background:#f3f2ff;border-color:#dcd8ff">
+    <h2 style="font-size:1rem;margin-top:0">🏷️ AI가 고른 태그</h2>
+    {% if rec_tags %}
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+      {% for t in rec_tags %}
+        <span class="pill" title="{{ t.desc }}">{{ t.key }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if rec_reasoning %}
+    <p class="muted" style="margin:0;font-size:.9rem"><strong>선정 이유:</strong> {{ rec_reasoning }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <form method="post" action="/projects/{{ project.id }}/personas" class="card">
 
@@ -253,6 +271,21 @@
     nextBtn.addEventListener('click', function () {
       if (page < Math.ceil(filteredItems.length / PAGE_SIZE) - 1) { page++; renderPage(); }
     });
+
+    // On "추천 받기", carry the current selection to the server so it excludes
+    // those personas and fills in with fresh ones, then show the busy state.
+    window.onRecommendSubmit = function (form) {
+      form.querySelectorAll('input[data-sel]').forEach(function (n) { n.remove(); });
+      Object.keys(selected).forEach(function (token) {
+        var inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'selected';
+        inp.value = token;
+        inp.setAttribute('data-sel', '1');
+        form.appendChild(inp);
+      });
+      return startBusy(form);
+    };
 
     init();
   })();

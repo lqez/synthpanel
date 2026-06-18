@@ -25,7 +25,8 @@ You help assemble a usability-testing panel. Given a testing focus and a fixed \
 list of persona tags, return the tags most worth prioritizing for that focus, \
 MOST IMPORTANT FIRST. Prefer tags that stress the focus, and include realistic \
 edge cases (low tech literacy, elderly, accessibility needs, slow networks) when \
-relevant. Use only tags from the provided list.\
+relevant. Use only tags from the provided list. Also give a brief reasoning \
+(one or two sentences) for the choice, written in the same language as the focus.\
 """
 
 _PRIORITIZE_SCHEMA = {
@@ -35,9 +36,13 @@ _PRIORITIZE_SCHEMA = {
             "type": "array",
             "items": {"type": "string", "enum": TAG_KEYS},
             "description": "Tag keys, most important first.",
-        }
+        },
+        "reasoning": {
+            "type": "string",
+            "description": "One or two sentences on why these tags fit the focus.",
+        },
     },
-    "required": ["tags"],
+    "required": ["tags", "reasoning"],
 }
 
 _ANTHROPIC_PRIORITIZE_TOOL = {
@@ -79,7 +84,7 @@ def _valid_tags(tags: object) -> list[str]:
     return out
 
 
-async def prioritize_with_anthropic(focus: str, config: dict) -> list[str]:
+async def prioritize_with_anthropic(focus: str, config: dict) -> tuple[list[str], str]:
     from anthropic import AsyncAnthropic
 
     client = AsyncAnthropic(api_key=config["api_key"])
@@ -94,11 +99,11 @@ async def prioritize_with_anthropic(focus: str, config: dict) -> list[str]:
     )
     for block in msg.content:
         if getattr(block, "type", "") == "tool_use":
-            return _valid_tags(block.input.get("tags", []))
-    return []
+            return _valid_tags(block.input.get("tags", [])), str(block.input.get("reasoning") or "")
+    return [], ""
 
 
-async def prioritize_with_openai(focus: str, config: dict) -> list[str]:
+async def prioritize_with_openai(focus: str, config: dict) -> tuple[list[str], str]:
     from openai import AsyncOpenAI
 
     client = AsyncOpenAI(
@@ -119,13 +124,14 @@ async def prioritize_with_openai(focus: str, config: dict) -> list[str]:
     for call in (resp.choices[0].message.tool_calls or []):
         if call.function.name == "prioritize":
             try:
-                return _valid_tags(json.loads(call.function.arguments).get("tags", []))
+                args = json.loads(call.function.arguments)
+                return _valid_tags(args.get("tags", [])), str(args.get("reasoning") or "")
             except Exception:  # noqa: BLE001
                 continue
-    return []
+    return [], ""
 
 
-async def prioritize_with_ollama(focus: str, config: dict) -> list[str]:
+async def prioritize_with_ollama(focus: str, config: dict) -> tuple[list[str], str]:
     from ollama import AsyncClient
 
     client = AsyncClient(
@@ -147,10 +153,10 @@ async def prioritize_with_ollama(focus: str, config: dict) -> list[str]:
             if isinstance(args, str):
                 args = json.loads(args)
             try:
-                return _valid_tags(args.get("tags", []))
+                return _valid_tags(args.get("tags", [])), str(args.get("reasoning") or "")
             except Exception:  # noqa: BLE001
                 continue
-    return []
+    return [], ""
 
 
 # ── Full persona generation ("create new persona" flow) ────────────────────────

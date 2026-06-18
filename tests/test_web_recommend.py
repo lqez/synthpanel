@@ -34,6 +34,17 @@ def test_recommend_renders_panel(client):
     assert re.search(r'id="lib-rec-data".*data-token', r.text, re.DOTALL)
 
 
+def test_recommend_shows_chosen_tags_and_reasoning(client):
+    pid = _new_project(client)
+    r = client.post(
+        f"/projects/{pid}/personas/recommend", data={"count": "3", "focus": "접근성 검토"}
+    )
+    assert r.status_code == 200
+    assert "AI가 고른 태그" in r.text
+    assert "accessibility-needs" in r.text  # heuristic picks accessibility tags
+    assert "선정 이유" in r.text
+
+
 def test_save_recommended_personas(client):
     pid = _new_project(client)
     rec = client.post(f"/projects/{pid}/personas/recommend", data={"count": "3"})

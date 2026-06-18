@@ -216,8 +216,23 @@ def _heuristic_tags(focus: str) -> list[str]:
     return out or list(_DEFAULT_TAG_PRIORITY)
 
 
-async def prioritize_tags(focus: str, provider_key: str, config: dict) -> list[str]:
-    """Ask the LLM to rank tags for the focus; fall back to a heuristic."""
+def _heuristic_reasoning(focus: str, matched: bool) -> str:
+    """A short, honest explanation for the offline (no-LLM) tag selection."""
+    if focus and matched:
+        return f"오프라인 추론: 입력한 목적 “{focus}”의 키워드와 맞는 태그를 우선했습니다."
+    return "오프라인 추론: 특정 목적이 없어 엣지케이스를 폭넓게 포함한 기본 구성을 사용했습니다."
+
+
+async def prioritize_tags(focus: str, provider_key: str, config: dict) -> tuple[list[str], str]:
+    """Rank tags for the focus and explain why; fall back to a heuristic.
+
+    Returns ``(tags, reasoning)``. The LLM does both in one call so the round
+    trip stays cheap; the offline path returns a brief canned reasoning.
+    """
+    # No focus means no signal for the model — skip the (slow) call entirely.
+    if not focus.strip():
+        return list(_DEFAULT_TAG_PRIORITY), _heuristic_reasoning("", matched=False)
+
     fns = {
         "anthropic": "prioritize_with_anthropic",
         "openai": "prioritize_with_openai",
@@ -228,12 +243,14 @@ async def prioritize_tags(focus: str, provider_key: str, config: dict) -> list[s
         try:
             import importlib
             mod = importlib.import_module("synthpanel.persona.llm_recommender")
-            tags = await getattr(mod, fn_name)(focus, config)
+            tags, reasoning = await getattr(mod, fn_name)(focus, config)
             if tags:
-                return tags
+                return tags, reasoning
         except Exception:  # noqa: BLE001 - never hard-fail recommendation
             pass
-    return _heuristic_tags(focus)
+    tags = _heuristic_tags(focus)
+    matched = tags != list(_DEFAULT_TAG_PRIORITY)
+    return tags, _heuristic_reasoning(focus, matched)
 
 
 def select_personas_by_tags(
@@ -256,6 +273,15 @@ def select_personas_by_tags(
     return [persona for _, _, persona in scored[:n]]
 
 
+@dataclass(frozen=True)
+class LibraryRec:
+    """Result of a library recommendation: the picks plus the why."""
+
+    personas: list[Persona]
+    tags: list[str]
+    reasoning: str
+
+
 async def recommend_from_library(
     *,
     focus: str,
@@ -263,16 +289,24 @@ async def recommend_from_library(
     library: list[Persona],
     provider_key: str,
     config: dict,
-) -> list[Persona]:
+    exclude_names: set[str] | None = None,
+) -> LibraryRec:
     """Recommend `n` personas from the existing library for a testing focus.
 
-    The LLM only prioritizes tags (fast); selection is local. With an empty
-    library we synthesize a balanced offline panel so the flow still works.
+    The LLM only prioritizes tags and explains the choice (fast, one call);
+    selection is local. `exclude_names` drops personas already chosen by the
+    user so recommendations fill in with fresh ones. With an empty library we
+    synthesize a balanced offline panel so the flow still works.
     """
+    exclude = exclude_names or set()
+    candidates = [p for p in library if p.name not in exclude]
     if not library:
-        return _ensure_personality(heuristic_panel(AppContext(url="", focus=focus), n))
-    tags = await prioritize_tags(focus, provider_key, config)
-    return select_personas_by_tags(library, tags, n)
+        panel = _ensure_personality(heuristic_panel(AppContext(url="", focus=focus), n))
+        return LibraryRec(panel, [], "")
+    tags, reasoning = await prioritize_tags(focus, provider_key, config)
+    if not candidates:
+        return LibraryRec([], tags, "이미 모든 라이브러리 페르소나가 선택되어 추가 추천이 없습니다.")
+    return LibraryRec(select_personas_by_tags(candidates, tags, n), tags, reasoning)
 
 
 def _ensure_personality(personas: list[Persona]) -> list[Persona]:

@@ -275,6 +275,12 @@ class Store:
                 (json.dumps(personas), project_id),
             )
 
+    def set_project_focus(self, project_id: int, focus: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE projects SET focus = ? WHERE id = ?", (focus, project_id)
+            )
+
     def project_language(self, project: dict) -> str:
         """Effective report language: the project's, falling back to the global default."""
         return project.get("language") or self.get_language()

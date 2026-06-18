@@ -31,6 +31,9 @@ from synthpanel.agent.providers import available_providers, list_models, support
 from synthpanel.orchestrator import PanelProgress
 from synthpanel.persona.models import Persona
 from synthpanel.persona.recommender import recommend_from_library, recommend_personas
+from synthpanel.persona.tags import TAGS
+
+_TAG_DESC: dict[str, str] = dict(TAGS)
 from synthpanel.report.aggregate import aggregate
 from synthpanel.report.languages import LANGUAGES, normalize
 from synthpanel.report.models import SessionResult
@@ -262,11 +265,21 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         return RedirectResponse(f"/projects/{project_id}/personas", status_code=303)
 
     # (e) step 2 — persona preparation for a project (library + AI recommend)
-    def _persona_setup(request, project, recommended=None):
+    def _persona_setup(
+        request,
+        project,
+        recommended=None,
+        also_selected_names=None,
+        rec_tags=None,
+        rec_reasoning="",
+    ):
         chosen = {p.get("name") for p in project["personas"]}
+        if also_selected_names:
+            chosen |= set(also_selected_names)
         rec_names = {p["name"] for p in (recommended or [])}
         library = [p for p in _library_choices() if p["name"] not in rec_names]
         archetypes = sorted({p["archetype"] for p in library if p["archetype"]})
+        tag_info = [{"key": k, "desc": _TAG_DESC.get(k, "")} for k in (rec_tags or [])]
         return render(
             request,
             "project_personas.html",
@@ -275,6 +288,8 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             recommended=recommended or [],
             chosen=chosen,
             archetypes=archetypes,
+            rec_tags=tag_info,
+            rec_reasoning=rec_reasoning or "",
         )
 
     @app.get("/projects/{project_id}/personas", response_class=HTMLResponse)
@@ -290,19 +305,43 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         if not project:
             return RedirectResponse("/projects", status_code=303)
         form = await request.form()
-        focus = (form.get("focus") or project.get("focus") or "").strip()
+        focus = (form.get("focus") or "").strip()
+        # (4) Persist a newly-entered focus to the project so it sticks.
+        if focus and focus != (project.get("focus") or ""):
+            store.set_project_focus(project_id, focus)
+            project = store.get_project(project_id)
+        focus = focus or (project.get("focus") or "")
+
+        # (2) Carry the user's current selection so we exclude it and fill in
+        # with fresh personas instead of re-recommending what they already have.
+        already: list[dict] = []
+        for token in form.getlist("selected"):
+            try:
+                already.append(_decode_persona(token))
+            except Exception:  # noqa: BLE001 - ignore tampered tokens
+                continue
+        selected_names = {p.get("name") for p in already}
+
         settings = store.get_settings() or {"provider": "fake", "config": {}}
-        # The LLM only ranks tags for the focus (fast); we then pick matching
-        # personas from the existing library locally.
+        # The LLM only ranks tags for the focus and explains why (fast, one call);
+        # we then pick matching personas from the existing library locally.
         library = [Persona.model_validate(p["data"]) for p in store.list_personas()]
-        personas = await recommend_from_library(
+        rec = await recommend_from_library(
             focus=focus,
             n=int(form.get("count") or 5),
             library=library,
             provider_key=settings["provider"],
             config=settings["config"],
+            exclude_names=selected_names,
         )
-        return _persona_setup(request, project, recommended=_persona_choices(personas))
+        return _persona_setup(
+            request,
+            project,
+            recommended=_persona_choices(rec.personas),
+            also_selected_names=selected_names,
+            rec_tags=rec.tags,
+            rec_reasoning=rec.reasoning,
+        )
 
     @app.post("/projects/{project_id}/personas")
     async def project_personas_save(request: Request, project_id: int):
