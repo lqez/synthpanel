@@ -4,13 +4,13 @@
   <h1>페르소나 준비 <span class="muted" style="font-size:1rem">2 / 2 · {{ project.name }}</span></h1>
   <p class="muted">{{ project.url }}</p>
 
-  {# AI 자동 추천 — separate form, re-renders page with recommended list #}
-  <form id="rec-form" method="post" action="/projects/{{ project.id }}/personas/recommend"
-        class="card" onsubmit="return onRecommendSubmit(this)">
+  {# AI 자동 추천 — separate form; recommending clears the selection and refills #}
+  <form method="post" action="/projects/{{ project.id }}/personas/recommend"
+        class="card" onsubmit="return startBusy(this)">
     <h2>AI 페르소나 자동 추천</h2>
     <p class="muted">테스트 목적(focus)에 맞는 태그 우선순위를 LLM이 정하고,
       라이브러리에서 적합한 페르소나를 골라줍니다.
-      이미 선택된 페르소나는 빼고 새로 채워줍니다.</p>
+      추천을 받으면 선택 목록을 비우고 새로 채웁니다.</p>
     <label>테스트 중점 (focus) <span class="muted" style="font-weight:400">— 선택사항</span></label>
     <textarea name="focus" rows="2" style="font-size:.9rem"
       placeholder="예: 회원가입 흐름 / 접근성 검토 / 결제까지 완료">{{ project.focus or '' }}</textarea>
@@ -22,35 +22,35 @@
         태그 우선순위를 분석하고 있어요. 잠시만 기다려 주세요.
       </span>
     </p>
-  </form>
 
-  {# AI가 고른 태그 + 이유 (recommend 직후에만 표시) #}
-  {% if rec_tags or rec_reasoning %}
-  <div class="card" style="background:#f3f2ff;border-color:#dcd8ff">
-    <h2 style="font-size:1rem;margin-top:0">🏷️ AI가 고른 태그</h2>
-    {% if rec_tags %}
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
-      {% for t in rec_tags %}
-        <span class="pill" title="{{ t.desc }}">{{ t.key }}</span>
-      {% endfor %}
+    {# AI가 고른 태그 + 이유 — 추천 직후에만, 같은 카드 안에 표시 #}
+    {% if rec_tags or rec_reasoning %}
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid #ececf3">
+      <h3 style="font-size:.95rem;margin:0 0 8px">🏷️ AI가 고른 태그</h3>
+      {% if rec_tags %}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        {% for t in rec_tags %}
+          <span class="pill" title="{{ t.desc }}">{{ t.key }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if rec_reasoning %}
+      <p class="muted" style="margin:0;font-size:.9rem"><strong>선정 이유:</strong> {{ rec_reasoning }}</p>
+      {% endif %}
     </div>
     {% endif %}
-    {% if rec_reasoning %}
-    <p class="muted" style="margin:0;font-size:.9rem"><strong>선정 이유:</strong> {{ rec_reasoning }}</p>
-    {% endif %}
-  </div>
-  {% endif %}
+  </form>
 
   <form method="post" action="/projects/{{ project.id }}/personas" class="card">
 
-    {# ── Selected box: chips with × button ─────────────────────────────── #}
+    {# ── Selected box: full-width rows with a remove button ─────────────── #}
     <div style="margin-bottom:16px">
       <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
         <label style="margin:0;font-weight:600">선택된 페르소나</label>
         <span id="lib-sel-count" class="muted" style="font-size:.85rem"></span>
       </div>
       <div id="lib-selected"
-           style="display:flex;flex-wrap:wrap;gap:6px;min-height:42px;padding:8px 10px;background:#f7f7fb;border-radius:8px;border:1px solid #ececf3;align-items:center">
+           style="min-height:42px;padding:0 12px;background:#f7f7fb;border-radius:8px;border:1px solid #ececf3">
       </div>
       <p id="lib-selected-empty" class="muted"
          style="margin:4px 2px 0;font-size:.88rem">아직 선택된 페르소나 없음</p>
@@ -157,42 +157,40 @@
       };
     }
 
-    function makeChip(item) {
-      var chip = document.createElement('div');
-      chip.style.cssText =
-        'display:inline-flex;align-items:center;gap:5px;' +
-        'background:#eef;border:1px solid #c8c8f0;border-radius:999px;' +
-        'padding:4px 8px 4px 12px;font-size:.88rem;max-width:260px;overflow:hidden';
+    // A selected persona shown as a full-width row (same layout as the library
+    // list) so its details are readable, with a remove button.
+    function makeSelectedRow(item) {
+      var row = document.createElement('div');
+      row.className = 'list-item';
 
-      // Hidden input so this token is submitted with the form
+      // Hidden input so this token is submitted with the save form.
       var inp = document.createElement('input');
       inp.type  = 'hidden';
       inp.name  = 'personas';
       inp.value = item.token;
-      chip.appendChild(inp);
+      row.appendChild(inp);
 
-      var lbl = document.createElement('span');
-      lbl.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-      lbl.innerHTML = '<strong>' + esc(item.name) + '</strong>' +
-        (item.archetype
-          ? ' <span style="color:var(--muted);font-size:.8rem">— ' + esc(item.archetype) + '</span>'
-          : '');
-      chip.appendChild(lbl);
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0';
+      info.innerHTML =
+        '<strong>' + esc(item.name) + '</strong>' +
+        (item.archetype ? ' <span class="muted">— ' + esc(item.archetype) + '</span>' : '') +
+        (item.region    ? ' <span class="muted" style="font-size:.8rem">· ' + esc(item.region) + '</span>' : '') +
+        '<br><span class="muted" style="font-size:.85rem">목표: ' + esc(item.goal) + '</span>';
+      row.appendChild(info);
 
       var x = document.createElement('button');
-      x.type  = 'button';
-      x.title = '제거';
-      x.textContent = '×';
-      x.style.cssText =
-        'flex-shrink:0;background:none;border:none;cursor:pointer;' +
-        'font-size:1rem;color:#888;padding:0;line-height:1';
+      x.type      = 'button';
+      x.className = 'btn secondary';
+      x.textContent = '✕ 제거';
+      x.style.cssText = 'padding:5px 12px;font-size:.85rem;white-space:nowrap;flex-shrink:0;margin-left:10px';
       x.addEventListener('click', function () {
         delete selected[item.token];
         renderSelected();
         applyFilter();
       });
-      chip.appendChild(x);
-      return chip;
+      row.appendChild(x);
+      return row;
     }
 
     function makeLibRow(item) {
@@ -228,7 +226,7 @@
       emptyMsg.style.display = tokens.length ? 'none' : '';
       selCountEl.textContent = tokens.length ? '(' + tokens.length + '명 선택됨)' : '';
       tokens.forEach(function (token) {
-        selDiv.appendChild(makeChip(selected[token]));
+        selDiv.appendChild(makeSelectedRow(selected[token]));
       });
     }
 
@@ -271,21 +269,6 @@
     nextBtn.addEventListener('click', function () {
       if (page < Math.ceil(filteredItems.length / PAGE_SIZE) - 1) { page++; renderPage(); }
     });
-
-    // On "추천 받기", carry the current selection to the server so it excludes
-    // those personas and fills in with fresh ones, then show the busy state.
-    window.onRecommendSubmit = function (form) {
-      form.querySelectorAll('input[data-sel]').forEach(function (n) { n.remove(); });
-      Object.keys(selected).forEach(function (token) {
-        var inp = document.createElement('input');
-        inp.type = 'hidden';
-        inp.name = 'selected';
-        inp.value = token;
-        inp.setAttribute('data-sel', '1');
-        form.appendChild(inp);
-      });
-      return startBusy(form);
-    };
 
     init();
   })();

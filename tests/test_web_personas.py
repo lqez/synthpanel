@@ -56,6 +56,30 @@ def test_recommended_personas_selected_from_library_and_saved(ctx):
     assert len(store.list_personas()) == before
 
 
+def test_recommend_clears_previous_selection(ctx):
+    client, store = ctx
+    r = client.post(
+        "/projects/new",
+        data={"name": "App", "url": "https://app.test", "language": "en"},
+        follow_redirects=False,
+    )
+    pid = r.headers["location"].split("/")[2]
+
+    # Save two personas to the project so it has a prior selection.
+    rec = client.post(f"/projects/{pid}/personas/recommend", data={"count": "2"})
+    tokens = re.findall(r'data-token="([^"]+)"', rec.text)
+    client.post(f"/projects/{pid}/personas", data={"personas": tokens[:2]}, follow_redirects=True)
+
+    # Re-opening the page shows the saved personas pre-selected...
+    page = client.get(f"/projects/{pid}/personas")
+    assert 'data-checked="true"' in page.text
+
+    # ...but recommending again starts fresh: nothing from the library stays
+    # pre-selected (only the new recommendations, rendered in #lib-rec-data).
+    again = client.post(f"/projects/{pid}/personas/recommend", data={"count": "2"})
+    assert 'data-checked="true"' not in again.text
+
+
 def test_recommend_persists_focus_to_project(ctx):
     client, store = ctx
     r = client.post(

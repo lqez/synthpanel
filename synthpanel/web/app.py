@@ -269,13 +269,14 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         request,
         project,
         recommended=None,
-        also_selected_names=None,
+        chosen_names=None,
         rec_tags=None,
         rec_reasoning="",
     ):
-        chosen = {p.get("name") for p in project["personas"]}
-        if also_selected_names:
-            chosen |= set(also_selected_names)
+        # `chosen_names` overrides which library personas start selected; default
+        # is the project's saved personas. Recommending passes an empty set so the
+        # selection is cleared and only the fresh recommendations are selected.
+        chosen = {p.get("name") for p in project["personas"]} if chosen_names is None else set(chosen_names)
         rec_names = {p["name"] for p in (recommended or [])}
         library = [p for p in _library_choices() if p["name"] not in rec_names]
         archetypes = sorted({p["archetype"] for p in library if p["archetype"]})
@@ -312,16 +313,6 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             project = store.get_project(project_id)
         focus = focus or (project.get("focus") or "")
 
-        # (2) Carry the user's current selection so we exclude it and fill in
-        # with fresh personas instead of re-recommending what they already have.
-        already: list[dict] = []
-        for token in form.getlist("selected"):
-            try:
-                already.append(_decode_persona(token))
-            except Exception:  # noqa: BLE001 - ignore tampered tokens
-                continue
-        selected_names = {p.get("name") for p in already}
-
         settings = store.get_settings() or {"provider": "fake", "config": {}}
         # The LLM only ranks tags for the focus and explains why (fast, one call);
         # we then pick matching personas from the existing library locally.
@@ -332,13 +323,14 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             library=library,
             provider_key=settings["provider"],
             config=settings["config"],
-            exclude_names=selected_names,
         )
+        # Recommending starts fresh: clear the current selection and select only
+        # the freshly recommended personas.
         return _persona_setup(
             request,
             project,
             recommended=_persona_choices(rec.personas),
-            also_selected_names=selected_names,
+            chosen_names=set(),
             rec_tags=rec.tags,
             rec_reasoning=rec.reasoning,
         )
