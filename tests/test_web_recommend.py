@@ -34,6 +34,14 @@ def test_recommend_renders_panel(client):
     assert re.search(r'id="lib-rec-data".*data-token', r.text, re.DOTALL)
 
 
+def test_recommend_preserves_count_input(client):
+    pid = _new_project(client)
+    r = client.post(f"/projects/{pid}/personas/recommend", data={"count": "3"})
+    assert r.status_code == 200
+    # The count field keeps the submitted value instead of resetting to 5.
+    assert 'name="count" value="3"' in r.text
+
+
 def test_recommend_shows_chosen_tags_and_reasoning(client):
     pid = _new_project(client)
     r = client.post(

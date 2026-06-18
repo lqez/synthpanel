@@ -15,7 +15,7 @@
     <textarea name="focus" rows="2" style="font-size:.9rem"
       placeholder="예: 회원가입 흐름 / 접근성 검토 / 결제까지 완료">{{ project.focus or '' }}</textarea>
     <label>추천 인원</label>
-    <input type="text" name="count" value="5" style="width:80px">
+    <input type="text" name="count" value="{{ count }}" style="width:80px">
     <p style="margin-top:14px">
       <button class="btn secondary" type="submit" data-busy-label="추천 받는 중…">✨ 추천 받기</button>
       <span class="muted busy-note" style="display:none;margin-left:10px;font-size:.88rem">
@@ -55,6 +55,9 @@
       <p id="lib-selected-empty" class="muted"
          style="margin:4px 2px 0;font-size:.88rem">아직 선택된 페르소나 없음</p>
     </div>
+
+    {# Save action, also up here so it's reachable without scrolling the list. #}
+    <p style="margin:0"><button class="btn" type="submit">저장하고 프로젝트로 →</button></p>
 
     <hr style="border:none;border-top:1px solid #ececf3;margin:16px 0">
 

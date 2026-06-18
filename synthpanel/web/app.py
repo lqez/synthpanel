@@ -272,6 +272,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         chosen_names=None,
         rec_tags=None,
         rec_reasoning="",
+        count=5,
     ):
         # `chosen_names` overrides which library personas start selected; default
         # is the project's saved personas. Recommending passes an empty set so the
@@ -291,6 +292,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             archetypes=archetypes,
             rec_tags=tag_info,
             rec_reasoning=rec_reasoning or "",
+            count=count,
         )
 
     @app.get("/projects/{project_id}/personas", response_class=HTMLResponse)
@@ -313,19 +315,24 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             project = store.get_project(project_id)
         focus = focus or (project.get("focus") or "")
 
+        try:
+            count = max(1, min(20, int(form.get("count") or 5)))
+        except (TypeError, ValueError):
+            count = 5
+
         settings = store.get_settings() or {"provider": "fake", "config": {}}
         # The LLM only ranks tags for the focus and explains why (fast, one call);
         # we then pick matching personas from the existing library locally.
         library = [Persona.model_validate(p["data"]) for p in store.list_personas()]
         rec = await recommend_from_library(
             focus=focus,
-            n=int(form.get("count") or 5),
+            n=count,
             library=library,
             provider_key=settings["provider"],
             config=settings["config"],
         )
         # Recommending starts fresh: clear the current selection and select only
-        # the freshly recommended personas.
+        # the freshly recommended personas. Echo the count so the input keeps it.
         return _persona_setup(
             request,
             project,
@@ -333,6 +340,7 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
             chosen_names=set(),
             rec_tags=rec.tags,
             rec_reasoning=rec.reasoning,
+            count=count,
         )
 
     @app.post("/projects/{project_id}/personas")
