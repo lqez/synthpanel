@@ -27,6 +27,11 @@
     .check { display:flex; gap:8px; align-items:flex-start; margin:8px 0; font-weight:400; }
     .check input { width:auto; margin-top:4px; }
     code { background:#f0f0f5; padding:1px 6px; border-radius:5px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display:inline-block; width:13px; height:13px; border:2px solid currentColor;
+      border-right-color:transparent; border-radius:50%; animation:spin .7s linear infinite;
+      vertical-align:-2px; margin-right:7px; }
+    button[disabled] { opacity:.6; cursor:progress; }
   </style>
 </head>
 <body>
@@ -42,5 +47,19 @@
   <div class="wrap">
     {% block body %}{% endblock %}
   </div>
+  <script>
+    // Show a busy state while a synchronous form POST (e.g. an LLM call that
+    // can take a while) is in flight, so the page never looks frozen.
+    function startBusy(form) {
+      var btn = form.querySelector('button[type=submit]');
+      if (btn) {
+        var label = btn.getAttribute('data-busy-label') || '처리 중…';
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>' + label;
+      }
+      form.querySelectorAll('.busy-note').forEach(function (n) { n.style.display = ''; });
+      return true;  // let the form submit normally
+    }
+  </script>
 </body>
 </html>

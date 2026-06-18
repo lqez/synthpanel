@@ -59,6 +59,27 @@ _OAI_TOOL = {
 }
 
 
+# Recommending a panel is lightweight structured generation, not the demanding
+# reasoning the browser agent needs — so it defaults to a fast, inexpensive model
+# rather than borrowing the (often flagship) agent model, which is the main cause
+# of slow recommendations. An explicit `recommend_model` in config still wins.
+_FAST_MODEL = {
+    "anthropic": "claude-haiku-4-5-20251001",
+    "openai": "gpt-4o-mini",
+    "ollama": "llama3.1",
+}
+
+
+def _recommend_model(config: dict, provider: str) -> str:
+    explicit = config.get("recommend_model")
+    if explicit:
+        return explicit
+    if provider == "ollama":
+        # Ollama only has the models the user has pulled; reuse the configured one.
+        return config.get("model") or _FAST_MODEL["ollama"]
+    return _FAST_MODEL[provider]
+
+
 def _make_prompt(context: AppContext, n: int) -> str:
     parts = []
     if context.url:
@@ -72,7 +93,7 @@ async def recommend_with_anthropic(context: AppContext, n: int, config: dict) ->
     from anthropic import AsyncAnthropic
 
     client = AsyncAnthropic(api_key=config["api_key"])
-    model = config.get("model") or "claude-opus-4-8"
+    model = _recommend_model(config, "anthropic")
     msg = await client.messages.create(
         model=model,
         max_tokens=4096,
@@ -94,7 +115,7 @@ async def recommend_with_openai(context: AppContext, n: int, config: dict) -> li
         api_key=config.get("api_key"),
         base_url=config.get("base_url") or None,
     )
-    model = config.get("model") or "gpt-4o"
+    model = _recommend_model(config, "openai")
     resp = await client.chat.completions.create(
         model=model,
         max_tokens=4096,
@@ -121,7 +142,7 @@ async def recommend_with_ollama(context: AppContext, n: int, config: dict) -> li
         host=config.get("base_url") or "http://localhost:11434",
         timeout=300.0,
     )
-    model = config.get("model") or "llama3.1"
+    model = _recommend_model(config, "ollama")
     resp = await client.chat(
         model=model,
         messages=[

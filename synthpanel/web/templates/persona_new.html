@@ -4,7 +4,8 @@
   <p><a href="/personas">← 페르소나 라이브러리</a></p>
   <h1>새 페르소나 생성</h1>
 
-  <form method="post" action="/personas/new/generate" class="card">
+  <form method="post" action="/personas/new/generate" class="card"
+        onsubmit="return startBusy(this)">
     <h2>LLM으로 생성</h2>
     <p class="muted">어떤 유형의 페르소나가 필요한지 설명하면 LLM이 생성합니다.
       설명 없이 생성하면 다양한 배경의 일반 사용자를 제안합니다.</p>
@@ -14,7 +15,10 @@
     <label>생성 수</label>
     <input type="text" name="count" value="{{ count }}" style="width:80px">
     <p style="margin-top:14px">
-      <button class="btn secondary" type="submit">✨ 생성</button>
+      <button class="btn secondary" type="submit" data-busy-label="생성 중…">✨ 생성</button>
+      <span class="muted busy-note" style="display:none;margin-left:10px;font-size:.88rem">
+        LLM이 페르소나를 생성하고 있어요. 최대 1분 정도 걸릴 수 있습니다.
+      </span>
     </p>
   </form>
 
