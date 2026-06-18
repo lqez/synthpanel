@@ -30,7 +30,7 @@ from fastapi.templating import Jinja2Templates
 from synthpanel.agent.providers import available_providers, list_models, supports_vision, test_connection
 from synthpanel.orchestrator import PanelProgress
 from synthpanel.persona.models import Persona
-from synthpanel.persona.recommender import recommend_personas
+from synthpanel.persona.recommender import recommend_from_library, recommend_personas
 from synthpanel.report.aggregate import aggregate
 from synthpanel.report.languages import LANGUAGES, normalize
 from synthpanel.report.models import SessionResult
@@ -290,11 +290,15 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         if not project:
             return RedirectResponse("/projects", status_code=303)
         form = await request.form()
+        focus = (form.get("focus") or project.get("focus") or "").strip()
         settings = store.get_settings() or {"provider": "fake", "config": {}}
-        personas = await recommend_personas(
-            url=project["url"],
-            focus=project["focus"],
+        # The LLM only ranks tags for the focus (fast); we then pick matching
+        # personas from the existing library locally.
+        library = [Persona.model_validate(p["data"]) for p in store.list_personas()]
+        personas = await recommend_from_library(
+            focus=focus,
             n=int(form.get("count") or 5),
+            library=library,
             provider_key=settings["provider"],
             config=settings["config"],
         )

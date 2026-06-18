@@ -8,7 +8,11 @@
   <form method="post" action="/projects/{{ project.id }}/personas/recommend" class="card"
         onsubmit="return startBusy(this)">
     <h2>AI 페르소나 자동 추천</h2>
-    <p class="muted">이 프로젝트의 URL을 분석해 엣지케이스를 포함한 패널을 제안합니다.</p>
+    <p class="muted">테스트 목적(focus)에 맞는 태그 우선순위를 LLM이 정하고,
+      라이브러리에서 적합한 페르소나를 골라줍니다.</p>
+    <label>테스트 중점 (focus) <span class="muted" style="font-weight:400">— 선택사항</span></label>
+    <textarea name="focus" rows="2" style="font-size:.9rem"
+      placeholder="예: 회원가입 흐름 / 접근성 검토 / 결제까지 완료">{{ project.focus or '' }}</textarea>
     <label>추천 인원</label>
     <input type="text" name="count" value="5" style="width:80px">
     <p style="margin-top:14px">

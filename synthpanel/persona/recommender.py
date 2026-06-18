@@ -28,6 +28,7 @@ from synthpanel.persona.models import (
     Psychographics,
     TechProfile,
 )
+from synthpanel.persona.tags import TAGS, tags_for
 
 
 @dataclass(frozen=True)
@@ -140,6 +141,138 @@ async def recommend_personas(
     if not personas:
         personas = heuristic_panel(context, n)
     return _ensure_personality(personas)
+
+
+# ── Tag-based recommendation from the existing library ─────────────────────────
+#
+# Rather than have the LLM author a whole panel (slow), it only prioritizes tags
+# for the focus (a tiny, fast call); personas are then selected from the library
+# locally by how well they match those tags, weighted by priority.
+
+# A balanced, edge-case-aware ordering used when there is no focus signal offline.
+_DEFAULT_TAG_PRIORITY: list[str] = [
+    "low-tech-literacy",
+    "senior",
+    "accessibility-needs",
+    "mobile-user",
+    "first-time-visitor",
+    "impatient",
+    "slow-network",
+    "skeptical",
+    "tech-savvy",
+    "privacy-conscious",
+]
+
+# Focus keyword -> tag hints for the offline/heuristic path. The real LLM handles
+# arbitrary (incl. Korean) focus text; this just keeps the offline fallback
+# sensible for the most common testing focuses.
+_FOCUS_HINTS: list[tuple[tuple[str, ...], list[str]]] = [
+    (("접근성", "accessib", "a11y", "screen reader", "스크린", "보조기기"),
+     ["accessibility-needs", "screen-reader", "low-vision", "motor-impairment"]),
+    (("고령", "노인", "시니어", "senior", "elderly", "어르신"),
+     ["senior", "low-tech-literacy"]),
+    (("초보", "입문", "처음", "beginner", "novice", "신규"),
+     ["low-tech-literacy", "first-time-visitor"]),
+    (("모바일", "mobile", "휴대"),
+     ["mobile-user"]),
+    (("데스크", "desktop", "pc"),
+     ["desktop-user"]),
+    (("결제", "구매", "체크아웃", "checkout", "payment", "purchase", "가격"),
+     ["price-sensitive", "cautious", "impatient"]),
+    (("회원가입", "가입", "signup", "sign up", "register", "온보딩", "onboarding"),
+     ["first-time-visitor", "privacy-conscious"]),
+    (("보안", "개인정보", "privacy", "security", "권한", "permission"),
+     ["privacy-conscious", "skeptical", "cautious"]),
+    (("속도", "느린", "네트워크", "network", "slow", "로딩"),
+     ["slow-network", "impatient"]),
+    (("검색", "search", "탐색"),
+     ["skimmer", "goal-driven"]),
+]
+
+
+def _heuristic_tags(focus: str) -> list[str]:
+    """Rank tags for a focus without an LLM: keyword hints + token overlap."""
+    f = (focus or "").lower()
+    out: list[str] = []
+
+    def add(tag: str) -> None:
+        if tag not in out:
+            out.append(tag)
+
+    for needles, tags in _FOCUS_HINTS:
+        if any(nd in f for nd in needles):
+            for tag in tags:
+                add(tag)
+
+    # Generic English token overlap with tag keys/descriptions.
+    if f:
+        import re
+
+        for key, desc in TAGS:
+            words = [w for w in re.findall(r"[a-z]+", f"{key} {desc}") if len(w) > 3]
+            if any(w in f for w in words):
+                add(key)
+
+    return out or list(_DEFAULT_TAG_PRIORITY)
+
+
+async def prioritize_tags(focus: str, provider_key: str, config: dict) -> list[str]:
+    """Ask the LLM to rank tags for the focus; fall back to a heuristic."""
+    fns = {
+        "anthropic": "prioritize_with_anthropic",
+        "openai": "prioritize_with_openai",
+        "ollama": "prioritize_with_ollama",
+    }
+    fn_name = fns.get(provider_key)
+    if fn_name:
+        try:
+            import importlib
+            mod = importlib.import_module("synthpanel.persona.llm_recommender")
+            tags = await getattr(mod, fn_name)(focus, config)
+            if tags:
+                return tags
+        except Exception:  # noqa: BLE001 - never hard-fail recommendation
+            pass
+    return _heuristic_tags(focus)
+
+
+def select_personas_by_tags(
+    library: list[Persona], priority_tags: list[str], n: int
+) -> list[Persona]:
+    """Pick `n` library personas ranked by weighted prioritized-tag match.
+
+    Earlier tags weigh more. Personas with no matched tag still fill any
+    remaining slots in library order, so a full panel is returned when possible.
+    """
+    n = max(1, n)
+    weights = {tag: len(priority_tags) - i for i, tag in enumerate(priority_tags)}
+    scored: list[tuple[int, int, Persona]] = []
+    for idx, persona in enumerate(library):
+        ptags = tags_for(persona)
+        score = sum(weight for tag, weight in weights.items() if tag in ptags)
+        scored.append((score, idx, persona))
+    # Highest score first; original order breaks ties for stable, sensible output.
+    scored.sort(key=lambda triple: (-triple[0], triple[1]))
+    return [persona for _, _, persona in scored[:n]]
+
+
+async def recommend_from_library(
+    *,
+    focus: str,
+    n: int,
+    library: list[Persona],
+    provider_key: str,
+    config: dict,
+) -> list[Persona]:
+    """Recommend `n` personas from the existing library for a testing focus.
+
+    The LLM only prioritizes tags (fast); selection is local. With an empty
+    library we synthesize a balanced offline panel so the flow still works.
+    """
+    if not library:
+        return _ensure_personality(heuristic_panel(AppContext(url="", focus=focus), n))
+    tags = await prioritize_tags(focus, provider_key, config)
+    return select_personas_by_tags(library, tags, n)
 
 
 def _ensure_personality(personas: list[Persona]) -> list[Persona]:

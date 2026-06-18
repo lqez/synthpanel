@@ -1,22 +1,13 @@
-from synthpanel.persona.llm_recommender import _recommend_model, _to_personas
+from synthpanel.persona.llm_recommender import _to_personas, _valid_tags
 
 
-def test_recommend_model_defaults_to_fast_model_per_provider():
-    # The lightweight recommend task should not borrow the heavy agent model,
-    # even when one is configured for the browser agent.
-    assert _recommend_model({"model": "claude-opus-4-8"}, "anthropic") == "claude-haiku-4-5-20251001"
-    assert _recommend_model({"model": "gpt-4o"}, "openai") == "gpt-4o-mini"
+def test_valid_tags_keeps_known_keys_in_order_and_dedupes():
+    out = _valid_tags(["senior", "not-a-tag", "senior", "mobile-user"])
+    assert out == ["senior", "mobile-user"]
 
 
-def test_recommend_model_explicit_override_wins():
-    cfg = {"model": "gpt-4o", "recommend_model": "gpt-4o"}
-    assert _recommend_model(cfg, "openai") == "gpt-4o"
-
-
-def test_recommend_model_ollama_reuses_pulled_model():
-    # Ollama only has the models the user has pulled, so reuse the configured one.
-    assert _recommend_model({"model": "qwen2.5"}, "ollama") == "qwen2.5"
-    assert _recommend_model({}, "ollama") == "llama3.1"
+def test_valid_tags_handles_none():
+    assert _valid_tags(None) == []
 
 
 def test_maps_valid_entries_and_defaults_goal():

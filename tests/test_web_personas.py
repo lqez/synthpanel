@@ -33,7 +33,7 @@ def test_delete_persona(ctx):
     assert store.get_persona(pid) is None
 
 
-def test_recommended_persona_persisted_on_save(ctx):
+def test_recommended_personas_selected_from_library_and_saved(ctx):
     client, store = ctx
     before = len(store.list_personas())
 
@@ -45,9 +45,12 @@ def test_recommended_persona_persisted_on_save(ctx):
     )
     pid = r.headers["location"].split("/")[2]
     rec = client.post(f"/projects/{pid}/personas/recommend", data={"count": "2"})
+    # Recommended personas render first (in #lib-rec-data), before the library list.
     tokens = re.findall(r'data-token="([^"]+)"', rec.text)
     client.post(f"/projects/{pid}/personas", data={"personas": tokens[:2]}, follow_redirects=True)
 
-    # New (recommended) personas were saved into the library.
-    assert len(store.list_personas()) >= before
-    assert any(p["source"] == "custom" for p in store.list_personas())
+    # Recommendations are drawn from the existing library, so saving snapshots
+    # them into the project without creating duplicate library rows.
+    saved = store.get_project(int(pid))["personas"]
+    assert len(saved) == 2
+    assert len(store.list_personas()) == before
