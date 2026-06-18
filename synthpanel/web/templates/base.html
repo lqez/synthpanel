@@ -30,7 +30,15 @@
   </style>
 </head>
 <body>
-  <header class="bar"><a href="/">⬢ SynthPanel</a><span class="muted">사용성 테스트</span></header>
+  <header class="bar">
+    <a href="/">⬢ SynthPanel</a>
+    <span class="muted">사용성 테스트</span>
+    <nav style="margin-left:auto;display:flex;gap:16px;font-size:.9rem">
+      <a href="/projects">프로젝트</a>
+      <a href="/personas">페르소나</a>
+      <a href="/preferences">설정</a>
+    </nav>
+  </header>
   <div class="wrap">
     {% block body %}{% endblock %}
   </div>

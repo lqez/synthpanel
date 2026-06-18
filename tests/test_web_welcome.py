@@ -38,8 +38,8 @@ def test_welcome_shows_failure_status(client, monkeypatch):
     page = client.get("/")
     assert "연결 실패" in page.text
     assert "stale key" in page.text
-    # No start button on failure; only the settings link.
-    assert 'href="/projects"' not in page.text
+    # No "시작하기" start button on failure; only the settings link.
+    assert "시작하기" not in page.text
     assert 'href="/onboarding"' in page.text
 
 
