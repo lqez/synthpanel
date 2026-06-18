@@ -45,7 +45,7 @@ def test_recommended_persona_persisted_on_save(ctx):
     )
     pid = r.headers["location"].split("/")[2]
     rec = client.post(f"/projects/{pid}/personas/recommend", data={"count": "2"})
-    tokens = re.findall(r'name="personas" value="([^"]+)"', rec.text)
+    tokens = re.findall(r'data-token="([^"]+)"', rec.text)
     client.post(f"/projects/{pid}/personas", data={"personas": tokens[:2]}, follow_redirects=True)
 
     # New (recommended) personas were saved into the library.

@@ -31,13 +31,13 @@ def test_recommend_renders_panel(client):
     pid = _new_project(client)
     r = client.post(f"/projects/{pid}/personas/recommend", data={"count": "4"})
     assert r.status_code == 200
-    assert "추천된 페르소나" in r.text
+    assert re.search(r'id="lib-rec-data".*data-token', r.text, re.DOTALL)
 
 
 def test_save_recommended_personas(client):
     pid = _new_project(client)
     rec = client.post(f"/projects/{pid}/personas/recommend", data={"count": "3"})
-    tokens = re.findall(r'name="personas" value="([^"]+)"', rec.text)
+    tokens = re.findall(r'data-token="([^"]+)"', rec.text)
     assert tokens
 
     saved = client.post(
