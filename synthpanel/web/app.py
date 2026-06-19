@@ -401,6 +401,8 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
                     "status": e.status,
                     "step_idx": e.step_idx,
                     "action_type": e.action_type,
+                    "action_target": e.action_target,
+                    "rationale": e.rationale,
                     "url": e.url,
                 },
             )
@@ -471,10 +473,12 @@ def create_app(store: Store | None = None, *, background: bool = True) -> FastAP
         }
         same_goal = len(base_goals) <= 1
         common_goal = next(iter(base_goals), "")
+        persona_names = [p.get("name", "") for p in personas]
         return render(
             request, "run_detail.html",
             run=run, agg=agg,
             persona_goals=persona_goals,
+            persona_names=persona_names,
             same_goal=same_goal,
             common_goal=common_goal,
         )

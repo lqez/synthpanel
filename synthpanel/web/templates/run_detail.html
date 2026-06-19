@@ -6,67 +6,144 @@
 
   {% if run.status == "running" %}
     <div class="card" id="live">
-      <h2>실행 중… <span class="muted" id="live-count"></span></h2>
-      <div id="live-personas"></div>
+      <h2 style="margin:0 0 12px">실행 중… <span class="muted" style="font-size:.9rem" id="live-count"></span></h2>
+      <div id="live-personas">
+        {% for name in persona_names %}
+        <div id="lp-{{ loop.index }}" style="border-top:1px solid #f0f0f5;padding:10px 0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <strong style="flex:1;min-width:0">{{ name }}</strong>
+            <span class="pill lp-status" id="lp-{{ loop.index }}-status"
+                  style="background:#e0e0ea;color:#555">대기중</span>
+            <button type="button" onclick="toggleLog({{ loop.index }})"
+                    id="lp-{{ loop.index }}-toggle"
+                    style="font-size:.78rem;padding:3px 10px;border:1px solid #ddd;border-radius:6px;background:#f7f7fb;cursor:pointer;white-space:nowrap">
+              로그 ▼
+            </button>
+          </div>
+          <div class="muted" id="lp-{{ loop.index }}-step"
+               style="font-size:.82rem;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">대기 중…</div>
+          <div id="lp-{{ loop.index }}-log"
+               style="display:none;margin-top:6px;max-height:220px;overflow-y:auto;
+                      background:#1e1e2e;color:#cdd6f4;border-radius:6px;
+                      padding:8px 10px;font-size:.78rem;font-family:monospace;line-height:1.55">
+          </div>
+        </div>
+        {% endfor %}
+      </div>
     </div>
     <script>
-      (function () {
-        var es = new EventSource("/runs/{{ run.id }}/stream");
+    (function () {
+      var es = new EventSource("/runs/{{ run.id }}/stream");
+
+      // slug: name → 1-based index (pre-built from server-rendered cards)
+      var nameToIdx = {};
+      {% for name in persona_names %}
+      nameToIdx[{{ name | tojson }}] = {{ loop.index }};
+      {% endfor %}
+
+      var ACT_COLOR = {
+        navigate: "#5b53e8", click: "#27ae60", type: "#2980b9",
+        scroll: "#7f8c8d", wait: "#7f8c8d", assert: "#16a085",
+        note: "#8e44ad", report_bug: "#c0392b",
+        done: "#27ae60", give_up: "#e67e22",
+      };
+
+      function esc(s) {
+        return String(s || "")
+          .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+          .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+      }
+
+      function getIdx(name) {
+        if (nameToIdx[name] !== undefined) return nameToIdx[name];
+        // Fallback: create a new card for an unexpected persona name
+        var idx = Object.keys(nameToIdx).length + 1;
+        nameToIdx[name] = idx;
         var container = document.getElementById("live-personas");
-        var count = document.getElementById("live-count");
-        var cardKeys = {};
-        var keyCount = 0;
+        var div = document.createElement("div");
+        div.id = "lp-" + idx;
+        div.style.cssText = "border-top:1px solid #f0f0f5;padding:10px 0";
+        div.innerHTML =
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<strong style="flex:1;min-width:0">' + esc(name) + '</strong>' +
+            '<span class="pill lp-status" id="lp-' + idx + '-status" style="background:#e0e0ea;color:#555">대기중</span>' +
+            '<button type="button" onclick="toggleLog(' + idx + ')" id="lp-' + idx + '-toggle" ' +
+              'style="font-size:.78rem;padding:3px 10px;border:1px solid #ddd;border-radius:6px;background:#f7f7fb;cursor:pointer;white-space:nowrap">로그 ▼</button>' +
+          '</div>' +
+          '<div class="muted" id="lp-' + idx + '-step" style="font-size:.82rem;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">대기 중…</div>' +
+          '<div id="lp-' + idx + '-log" style="display:none;margin-top:6px;max-height:220px;overflow-y:auto;background:#1e1e2e;color:#cdd6f4;border-radius:6px;padding:8px 10px;font-size:.78rem;font-family:monospace;line-height:1.55"></div>';
+        container.appendChild(div);
+        return idx;
+      }
 
-        function getKey(name) {
-          if (!cardKeys[name]) cardKeys[name] = "lp" + (++keyCount);
-          return cardKeys[name];
+      function appendLog(idx, html) {
+        var log = document.getElementById("lp-" + idx + "-log");
+        if (!log) return;
+        var div = document.createElement("div");
+        div.innerHTML = html;
+        log.appendChild(div);
+        // Auto-scroll if visible
+        if (log.style.display !== "none") log.scrollTop = log.scrollHeight;
+      }
+
+      es.onmessage = function (ev) {
+        var e = JSON.parse(ev.data);
+        var idx = getIdx(e.persona);
+        var stepEl  = document.getElementById("lp-" + idx + "-step");
+        var statEl  = document.getElementById("lp-" + idx + "-status");
+        var countEl = document.getElementById("live-count");
+
+        if (e.kind === "queue") {
+          // Already shown as 대기중; nothing to do
+        } else if (e.kind === "start") {
+          if (statEl) { statEl.textContent = "실행중"; statEl.style.background = ""; statEl.style.color = ""; }
+          if (stepEl) stepEl.textContent = "시작 중…";
+          appendLog(idx,
+            '<span style="color:#a6e3a1">▶ 세션 시작</span>');
+        } else if (e.kind === "step") {
+          var num  = (e.step_idx != null) ? (e.step_idx + 1) : "?";
+          var act  = e.action_type || "";
+          var col  = ACT_COLOR[act] || "#aaa";
+          var urlShort = e.url ? e.url.replace(/^https?:\/\//, "").slice(0, 60) : "";
+          var tgt  = e.action_target ? " <span style='color:#89b4fa'>" + esc(e.action_target) + "</span>" : "";
+          var rat  = e.rationale    ? "<div style='color:#a6adc8;padding-left:14px;margin-top:1px'>&ldquo;" + esc(e.rationale.slice(0, 120)) + "&rdquo;</div>" : "";
+
+          if (stepEl) {
+            stepEl.textContent = "스텝 " + num + " · " + act + (urlShort ? " · " + urlShort : "");
+          }
+          appendLog(idx,
+            '<div><span style="color:#6c7086">스텝 ' + num + '</span> ' +
+            '<span style="color:' + col + ';font-weight:600">' + esc(act) + '</span>' +
+            tgt +
+            (urlShort ? ' <span style="color:#585b70">· ' + esc(urlShort) + '</span>' : '') +
+            '</div>' + rat);
+        } else if (e.kind === "finish") {
+          var ok = (e.status === "success");
+          if (statEl) {
+            statEl.textContent = e.status || "done";
+            statEl.style.background = ok ? "#27ae60" : (e.status === "gaveup" ? "#e67e22" : "#c0392b");
+            statEl.style.color = "#fff";
+          }
+          if (stepEl) stepEl.textContent = "";
+          appendLog(idx,
+            '<span style="color:' + (ok ? "#a6e3a1" : "#f38ba8") + '">■ 완료 · ' + esc(e.status || "") + '</span>');
         }
 
-        function ensureCard(name) {
-          var key = getKey(name);
-          if (!document.getElementById(key)) {
-            var div = document.createElement("div");
-            div.id = key;
-            div.style.cssText = "padding:8px 0;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:flex-start;gap:8px";
-            div.innerHTML =
-              '<div style="flex:1;min-width:0">' +
-                '<strong>' + name + '</strong>' +
-                '<div class="muted" id="' + key + '-step" style="font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">대기 중...</div>' +
-              '</div>' +
-              '<span class="pill" id="' + key + '-status">실행중</span>';
-            container.appendChild(div);
-          }
-        }
+        if (e.total && countEl) countEl.textContent = "(" + (e.index + 1) + "/" + e.total + ")";
+      };
 
-        es.onmessage = function (ev) {
-          var e = JSON.parse(ev.data);
-          ensureCard(e.persona);
-          var key = getKey(e.persona);
-          var stepEl = document.getElementById(key + "-step");
-          var statusEl = document.getElementById(key + "-status");
+      es.addEventListener("done", function () { es.close(); location.reload(); });
+    })();
 
-          if (e.kind === "step" && stepEl) {
-            var num = (e.step_idx !== null && e.step_idx !== undefined) ? (e.step_idx + 1) : "?";
-            var act = e.action_type || "";
-            var urlPart = e.url ? " — " + e.url.replace(/^https?:\/\//, "").slice(0, 50) : "";
-            stepEl.textContent = "스텝 " + num + ": " + act + urlPart;
-          } else if (e.kind === "finish") {
-            if (statusEl) {
-              statusEl.textContent = e.status || "done";
-              statusEl.style.background = (e.status === "success") ? "#27ae60" : "#c0392b";
-              statusEl.style.color = "#fff";
-            }
-            if (stepEl) stepEl.textContent = "";
-          }
-
-          if (e.total) count.textContent = "(" + (e.index + 1) + "/" + e.total + ")";
-        };
-
-        es.addEventListener("done", function () {
-          es.close();
-          location.reload();
-        });
-      })();
+    function toggleLog(idx) {
+      var log = document.getElementById("lp-" + idx + "-log");
+      var btn = document.getElementById("lp-" + idx + "-toggle");
+      if (!log) return;
+      var open = log.style.display !== "none";
+      log.style.display = open ? "none" : "block";
+      btn.textContent = open ? "로그 ▼" : "닫기 ▲";
+      if (!open) log.scrollTop = log.scrollHeight;
+    }
     </script>
   {% endif %}
 

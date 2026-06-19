@@ -29,12 +29,14 @@ ProgressSink = Callable[["PanelProgress"], Awaitable[None] | None]
 @dataclass(frozen=True)
 class PanelProgress:
     persona_name: str
-    kind: str  # "start" | "step" | "finish"
+    kind: str  # "queue" | "start" | "step" | "finish"
     index: int
     total: int
     status: str | None = None
     step_idx: int | None = None
     action_type: str | None = None
+    action_target: str | None = None
+    rationale: str | None = None
     url: str | None = None
 
 
@@ -57,12 +59,16 @@ async def _run_once(
     index: int = 0,
     total: int = 1,
 ) -> SessionResult:
-    async def _on_step(step_idx: int, action_type: str, url: str | None) -> None:
+    async def _on_step(
+        step_idx: int, action_type: str, url: str | None,
+        action_target: str | None = None, rationale: str | None = None,
+    ) -> None:
         await _emit(
             on_progress,
             PanelProgress(
                 persona.name, "step", index, total,
-                step_idx=step_idx, action_type=action_type, url=url,
+                step_idx=step_idx, action_type=action_type,
+                action_target=action_target, rationale=rationale, url=url,
             ),
         )
 
@@ -107,6 +113,7 @@ async def run_panel(
                 return await asyncio.wait_for(coro, timeout=session_timeout)
             return await coro
 
+        await _emit(on_progress, PanelProgress(persona.name, "queue", index, total))
         async with sem:
             await _emit(on_progress, PanelProgress(persona.name, "start", index, total))
             result = await _attempt(persona, run_with_timeout, retries)

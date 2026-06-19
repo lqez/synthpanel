@@ -27,7 +27,7 @@ from synthpanel.report.models import (
     StepTrace,
 )
 
-StepSink = Callable[[int, str, str | None], Awaitable[None] | None]
+StepSink = Callable[[int, str, str | None, str | None, str | None], Awaitable[None] | None]
 
 
 async def run_session(
@@ -84,7 +84,10 @@ async def run_session(
             action = Action(type=ActionType.GIVE_UP, rationale=f"LLM error: {llm_error}")
 
         if on_step is not None:
-            maybe = on_step(step_idx, action.type.value, observation.url)
+            maybe = on_step(
+                step_idx, action.type.value, observation.url,
+                action.target, action.rationale,
+            )
             if asyncio.iscoroutine(maybe):
                 await maybe
 
