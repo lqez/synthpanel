@@ -8,12 +8,15 @@ function tools and returns parsed `message.tool_calls`.
 from __future__ import annotations
 
 import json
+import logging
+import time
 
 from synthpanel.agent.actions import Action, ActionType
 from synthpanel.agent.llm import Turn
 from synthpanel.agent.prompts import SYSTEM_TEMPLATE, render_user_turn
 
 _DEFAULT_HOST = "http://localhost:11434"
+_log = logging.getLogger(__name__)
 
 # OpenAI/Ollama function-tool form of the action schema (mirrors agent.actions.Action).
 _ACT_TOOL = {
@@ -58,10 +61,34 @@ class OllamaProvider:
         user_msg: dict = {"role": "user", "content": render_user_turn(turn)}
         if turn.observation.screenshot_b64:
             user_msg["images"] = [turn.observation.screenshot_b64]
-        resp = await self._client.chat(
-            model=self._model,
-            messages=[{"role": "system", "content": SYSTEM_TEMPLATE}, user_msg],
-            tools=[_ACT_TOOL],
+
+        _log.info(
+            "ollama.chat start: model=%s step=%d url=%r",
+            self._model, turn.step_idx, turn.observation.url,
+        )
+        t0 = time.monotonic()
+        try:
+            resp = await self._client.chat(
+                model=self._model,
+                messages=[{"role": "system", "content": SYSTEM_TEMPLATE}, user_msg],
+                tools=[_ACT_TOOL],
+            )
+        except Exception as exc:
+            elapsed = time.monotonic() - t0
+            _log.error(
+                "ollama.chat error: model=%s step=%d elapsed=%.1fs url=%r error=%s",
+                self._model, turn.step_idx, elapsed, turn.observation.url, exc,
+                exc_info=True,
+            )
+            raise
+
+        elapsed = time.monotonic() - t0
+        _log.info(
+            "ollama.chat done: model=%s step=%d elapsed=%.1fs in=%d out=%d url=%r",
+            self._model, turn.step_idx, elapsed,
+            getattr(resp, "prompt_eval_count", 0) or 0,
+            getattr(resp, "eval_count", 0) or 0,
+            turn.observation.url,
         )
         self._record_usage(resp)
         for call in getattr(resp.message, "tool_calls", None) or []:
@@ -72,6 +99,10 @@ class OllamaProvider:
                 return Action.model_validate(args)
             except Exception:  # noqa: BLE001 - skip malformed call, try the next
                 continue
+        _log.warning(
+            "ollama.chat no_tool_call: model=%s step=%d url=%r",
+            self._model, turn.step_idx, turn.observation.url,
+        )
         return Action(type=ActionType.GIVE_UP, rationale="No tool call returned by model.")
 
 

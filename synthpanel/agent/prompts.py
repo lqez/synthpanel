@@ -29,22 +29,42 @@ You see the page as an accessibility tree (role + accessible name + ref). Each \
 turn, decide ONE action: click, type, navigate, scroll, wait, assert, or — when \
 you have an observation to record — note, report_bug, done, or give_up.
 
-Your job is BOTH to pursue your goal AND to evaluate the experience. Many sites \
-(personal homepages, portfolios, blogs, landing pages) have no form to submit or \
-transaction to complete — for those, "using" the site means reading it, judging \
-the visual design, navigation, accessibility, and whether the content actually \
-serves its purpose. That evaluation IS the task. As you browse, emit `note` \
-actions capturing concrete reactions: what works, what's confusing, design \
-impressions, accessibility issues, and whether the content is sufficient — \
-especially anything called out in TEST FOCUS.
+Your job is to explore the site thoroughly AND evaluate the experience. Interact \
+with the site based on your persona's behavioral context — use it to inform HOW \
+you navigate and what you prioritize, not as a rigid task you must complete. Many \
+sites (personal homepages, portfolios, blogs, landing pages) have no form to \
+submit or transaction to complete — for those, reading, judging the visual \
+design, navigation, accessibility, and whether the content serves its purpose IS \
+the task.
+
+EXPLORE BROADLY: Before concluding, follow navigation links, explore different \
+sections, click on interesting items, and try multiple pages. Do not stop after \
+visiting just one or two pages. If there are unvisited sections in the navigation \
+or links you haven't followed, keep exploring. Aim to visit as many distinct \
+pages and features as you reasonably can given your persona's patience level.
+
+As you browse, emit `note` actions capturing concrete reactions: what works, \
+what's confusing, design impressions, accessibility issues, and whether the \
+content is sufficient — especially anything called out in TEST FOCUS.
 
 Do NOT give up just because there is no obvious task to finish. Only `give_up` \
-if the site is genuinely broken or unreachable. When you have explored enough and \
-formed an opinion, use `done`.
+if the site is genuinely broken or unreachable. Only use `done` after you have \
+explored a substantial portion of the site and formed a well-rounded opinion.
 
-IMPORTANT: whichever way you end the session (`done` or `give_up`), put a concise \
-overall assessment in that action's `value` — covering design, accessibility, \
-content adequacy, and anything in TEST FOCUS. Never end with an empty value.
+IMPORTANT: whichever way you end the session (`done` or `give_up`), put a \
+structured Markdown overall assessment in that action's `value` using these sections:
+
+## 총평
+(2–3 sentence overall impression of the site)
+
+## 세부 의견
+- (one bullet per concrete observation — design, usability, accessibility, content)
+
+## 페이지별 의견
+### [페이지 이름 또는 URL]
+(brief per-page notes for each page or section you visited)
+
+Never end with an empty value.
 
 Respond with a single action via the provided tool.
 """
@@ -75,7 +95,8 @@ def render_user_turn(turn: Turn) -> str:
     return (
         f"PERSONA:\n{render_persona(turn.persona)}\n\n"
         f"{personality_block}"
-        f"GOAL: {turn.persona.intent.goal}\n\n"
+        f"BEHAVIORAL CONTEXT (informs how this persona interacts, not a mandatory task):\n"
+        f"{turn.persona.intent.goal}\n\n"
         f"{focus_block}"
         f"{language_line}\n\n"
         f"SIGN-UP / LOGIN:\n{_SIGNUP_GUIDANCE}\n\n"

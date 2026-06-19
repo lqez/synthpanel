@@ -8,7 +8,10 @@ production (Anthropic + Playwright). See PLAN.md section 2.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Awaitable, Callable
+
+_log = logging.getLogger(__name__)
 
 from synthpanel.agent.actions import TERMINAL_ACTIONS, Action, ActionType
 from synthpanel.agent.llm import LLMProvider, Turn
@@ -32,7 +35,7 @@ async def run_session(
     browser: BrowserSession,
     llm: LLMProvider,
     *,
-    max_steps: int = 25,
+    max_steps: int = 40,
     secrets: set[str] | None = None,
     language: str = "en",
     focus: str = "",
@@ -71,6 +74,13 @@ async def run_session(
             action = await llm.decide(turn)
         except Exception as exc:  # noqa: BLE001
             llm_error = f"{type(exc).__name__}: {exc}"
+            _log.error(
+                "llm_error: persona=%r step=%d url=%r error=%s",
+                persona.name, step_idx,
+                observation.url if observation else "",
+                llm_error,
+                exc_info=True,
+            )
             action = Action(type=ActionType.GIVE_UP, rationale=f"LLM error: {llm_error}")
 
         if on_step is not None:

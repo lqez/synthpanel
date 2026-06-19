@@ -85,7 +85,7 @@ class Intent(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
-    goal: str = Field(..., description="Job-to-be-done in the app.")
+    goal: str = Field(..., description="Behavioral tendency and occupational context — how this persona interacts with digital products, not a specific task to complete.")
     context: VisitContext | None = None
     time_pressure: TimePressure | None = None
     motivation: Level | None = None

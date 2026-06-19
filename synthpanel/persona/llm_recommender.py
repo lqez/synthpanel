@@ -165,8 +165,12 @@ _SYSTEM = """\
 You design a balanced panel of realistic user personas for usability-testing a \
 web app. Cover the likely audience AND deliberate edge cases: low tech literacy, \
 elderly users, accessibility needs (screen readers), slow networks. Make each \
-persona believable, never a caricature. Each persona must have a concrete goal \
-tied to the app's focus.
+persona believable, never a caricature. Each persona's `goal` field should \
+describe their behavioral tendency and occupational context — WHO they are and \
+HOW they interact with digital products — NOT a specific task to complete on \
+the app. Examples: "Busy professional who scans quickly and hates lengthy forms", \
+"Privacy-conscious retiree who reads every policy before agreeing", \
+"Power user who relies on keyboard shortcuts and advanced filters".
 """
 
 # Anthropic tool format
@@ -183,7 +187,7 @@ _ANTHROPIC_TOOL = {
                     "properties": {
                         "name": {"type": "string"},
                         "archetype": {"type": "string"},
-                        "goal": {"type": "string"},
+                        "goal": {"type": "string", "description": "Behavioral tendency and occupational context — who they are and how they interact with digital products, NOT a specific task."},
                         "demographics": {"type": "object"},
                         "tech": {"type": "object"},
                         "psych": {"type": "object"},

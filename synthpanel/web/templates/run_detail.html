@@ -139,7 +139,7 @@
                 <td style="text-align:center;padding:6px 4px">{{ s.steps|length }}</td>
                 <td style="text-align:center;padding:6px 4px">{{ s.bugs|length }}</td>
                 <td style="padding:6px 4px;color:#666;font-size:.85rem">
-                  {% if s.ux_feedback %}{{ s.ux_feedback | truncate(80) }}{% endif %}
+                  {% if s.ux_feedback %}{{ s.ux_feedback | truncate(100) }}{% endif %}
                 </td>
               </tr>
               {% if s.bugs %}
@@ -174,7 +174,9 @@
           {% if persona_goals.get(s.persona_name) %}
             <p class="muted" style="margin-top:0;font-size:.85rem">목표: {{ persona_goals.get(s.persona_name) }}</p>
           {% endif %}
-          {% if s.ux_feedback %}<p class="muted">{{ s.ux_feedback }}</p>{% endif %}
+          {% if s.ux_feedback %}
+            <div class="md-body muted" data-md="{{ s.ux_feedback | e }}"></div>
+          {% endif %}
 
           {% if s.bugs %}
             <strong>버그 {{ s.bugs|length }}건</strong>
@@ -201,6 +203,21 @@
       {% endfor %}
     {% endif %}
   {% endif %}
+  <script>
+  // Render all [data-md] elements as Markdown once marked.js is available.
+  (function () {
+    function renderMd() {
+      document.querySelectorAll('[data-md]').forEach(function (el) {
+        if (el.dataset.md) {
+          el.innerHTML = marked.parse(el.dataset.md);
+          delete el.dataset.md;
+        }
+      });
+    }
+    if (typeof marked !== 'undefined') { renderMd(); }
+    else { window.addEventListener('load', renderMd); }
+  })();
+  </script>
 {% endblock %}
 
 {# ──────────────────────────────────────────────────────────────────── #}

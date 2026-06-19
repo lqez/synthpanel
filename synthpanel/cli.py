@@ -31,14 +31,21 @@ def version() -> None:
 def serve(
     host: str = typer.Option("127.0.0.1", help="Bind host."),
     port: int = typer.Option(8000, help="Bind port."),
+    log_level: str = typer.Option("info", help="Log level (debug/info/warning/error)."),
 ) -> None:
     """Launch the local web app (onboarding flow + projects + runs)."""
+    import logging
+
     import uvicorn
 
     from synthpanel.web.app import create_app
 
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
     rprint(f"SynthPanel web UI → http://{host}:{port}")
-    uvicorn.run(create_app(), host=host, port=port)
+    uvicorn.run(create_app(), host=host, port=port, log_level=log_level)
 
 
 @app.command()
